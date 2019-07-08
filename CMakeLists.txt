@@ -4,6 +4,7 @@ project(VulkanEngine)
 
 # need Vulkan, GLM, GLFW
 find_package(Vulkan REQUIRED)
+add_subdirectory(Submodules)
 
 add_subdirectory(SourceCode)
 
