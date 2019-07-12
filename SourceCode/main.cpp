@@ -1,4 +1,5 @@
 #include <iostream>
+#include <string> // needed for checking validation layers
 #include <vector>
 #include <cassert>
 #include <exception>
@@ -7,11 +8,20 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
+static const std::vector<const char*> validationLayers = { "VK_LAYER_KHRONOS_validation" }; // following tutorial structure, refactor once we're got a triangle on screen
+// VK_LAYER_LUNARG_standard_validation found, check if that can be used as an alternative. could need to update drivers
 class VulkanApp
 {
 public:
 	VulkanApp()
 		: m_window(nullptr)
+		, m_vulkanInstance(nullptr)
+#if (NDEBUG)
+		, m_useVulkanValidationLayers(false) // release build
+#else
+		, m_useVulkanValidationLayers(true) // debug build
+#endif
+
 	{}
 
 	~VulkanApp()
@@ -33,7 +43,7 @@ private:
 		}
 		catch (const std::exception& ex)
 		{
-
+			// if WIN32 OutputDebugString(), figure out Unix like equivelent
 		}
 	}
 	void InitWindow()
@@ -50,8 +60,32 @@ private:
 		QueryVulkanExtentions();
 	}
 
+	bool AreVulkanValidationLayersSupported()
+	{
+		uint32_t nLayers = 0;
+		vkEnumerateInstanceLayerProperties(&nLayers, nullptr);
+
+		std::vector<VkLayerProperties> availableLayers(nLayers);
+		vkEnumerateInstanceLayerProperties(&nLayers, availableLayers.data());
+
+		const std::string targetLayerStr = std::string(validationLayers[0]);
+		bool validationLayerFound = false;
+		for (uint32_t i = 0; i < nLayers && !validationLayerFound; ++i)
+		{
+			validationLayerFound = targetLayerStr == availableLayers[i].layerName;
+		}
+		return validationLayerFound;
+	}
+
+
+
 	void CreateVulkanInstance()
 	{
+		if (m_useVulkanValidationLayers && !AreVulkanValidationLayersSupported())
+		{
+			throw std::runtime_error("tried to run with Vulkan validation layers, this setup doesn't support them.");
+		}
+
 		VkApplicationInfo appInfo = {};
 		appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
 		appInfo.pApplicationName = "Vulkan Triangle";
@@ -69,7 +103,20 @@ private:
 		glfwExtCStrs = glfwGetRequiredInstanceExtensions(&glfwRequiredExtCount);
 		instanceCreateInfo.enabledExtensionCount = glfwRequiredExtCount;
 		instanceCreateInfo.ppEnabledExtensionNames = glfwExtCStrs;
-		instanceCreateInfo.enabledLayerCount = 0;
+
+		if (m_useVulkanValidationLayers)
+		{
+			
+			instanceCreateInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
+			instanceCreateInfo.ppEnabledLayerNames = validationLayers.data();
+		}
+		else
+		{
+			instanceCreateInfo.enabledLayerCount = 0;
+		}
+		 
+
+		
 
 		VkResult instanceCreateRes = vkCreateInstance(&instanceCreateInfo, nullptr, &m_vulkanInstance); // the nullptr would be for an allocator callback function.
 		if (instanceCreateRes != VK_SUCCESS)
@@ -110,6 +157,7 @@ private:
 
 	GLFWwindow* m_window;
 	VkInstance m_vulkanInstance;
+	const bool m_useVulkanValidationLayers;
 };
 
 
