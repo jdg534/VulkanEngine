@@ -119,19 +119,22 @@ private:
 		instanceCreateInfo.enabledExtensionCount = static_cast<uint32_t>(requiredExtentions.size());
 		instanceCreateInfo.ppEnabledExtensionNames = requiredExtentions.data();
 
+		VkDebugUtilsMessengerCreateInfoEXT dbgCreateInfo = {};
+		// declared outside the if so doesn't go out of scope on calling vkCreateInstance()
+
 		if (m_useVulkanValidationLayers)
 		{
 			
 			instanceCreateInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
 			instanceCreateInfo.ppEnabledLayerNames = validationLayers.data();
+			PopulateVulkanDebugMessengerCreateInfo(dbgCreateInfo);
+			instanceCreateInfo.pNext = &dbgCreateInfo;
 		}
 		else
 		{
 			instanceCreateInfo.enabledLayerCount = 0;
+			instanceCreateInfo.pNext = nullptr;
 		}
-		 
-
-		
 
 		VkResult instanceCreateRes = vkCreateInstance(&instanceCreateInfo, nullptr, &m_vulkanInstance); // the nullptr would be for an allocator callback function.
 		if (instanceCreateRes != VK_SUCCESS)
@@ -141,17 +144,22 @@ private:
 		std::cout << "Vulkan Instance created successfully" << std::endl;
 	}
 
+	void PopulateVulkanDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo)
+	{
+		createInfo = {};
+		createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
+		createInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+		createInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
+		createInfo.pfnUserCallback = VulkanDebugCallback;
+	}
+
 	void SetupVulkanDebugMessenger()
 	{
 		if (!m_useVulkanValidationLayers)
 			return;
 
 		VkDebugUtilsMessengerCreateInfoEXT createInfo = {};
-		createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
-		createInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
-		createInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
-		createInfo.pfnUserCallback = VulkanDebugCallback;
-		createInfo.pUserData = nullptr; // Optional
+		PopulateVulkanDebugMessengerCreateInfo(createInfo);
 
 		if (CreateDebugUtilsMessengerEXT(m_vulkanInstance, &createInfo, nullptr, &m_vulkanDebugMessenger) != VK_SUCCESS)
 		{
