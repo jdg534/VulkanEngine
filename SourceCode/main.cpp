@@ -16,6 +16,7 @@ public:
 	VulkanApp()
 		: m_window(nullptr)
 		, m_vulkanInstance(nullptr)
+		, m_vulkanPhysicalDevice(nullptr)
 #if (NDEBUG)
 		, m_useVulkanValidationLayers(false) // release build
 #else
@@ -58,8 +59,8 @@ private:
 	void InitVulkan()
 	{
 		CreateVulkanInstance();
-
 		QueryVulkanExtentions();
+		SelectVulkanDevice();
 	}
 
 	bool AreVulkanValidationLayersSupported()
@@ -181,6 +182,60 @@ private:
 		}
 	}
 
+	void SelectVulkanDevice()
+	{
+		uint32_t deviceCount = 0;
+		vkEnumeratePhysicalDevices(m_vulkanInstance, &deviceCount, nullptr);
+
+		if (deviceCount == 0)
+		{
+			throw std::runtime_error("failed to find GPUs with Vulkan support!");
+		}
+
+		std::vector<VkPhysicalDevice> devices(deviceCount);
+		vkEnumeratePhysicalDevices(m_vulkanInstance, &deviceCount, devices.data());
+
+		// TODO: come back to this on https://vulkan-tutorial.com/Drawing_a_triangle/Setup/Physical_devices_and_queue_families, use the device score system
+		uint32_t suitabilityScoreToBeat = 0;
+		uint32_t currentDeviceSuitabilityScore = 0;
+		for (const VkPhysicalDevice& currentDevice : devices)
+		{
+			currentDeviceSuitabilityScore = CalculateVulkanDeviceSuitability(currentDevice);
+			if (suitabilityScoreToBeat < currentDeviceSuitabilityScore)
+			{
+				m_vulkanPhysicalDevice = currentDevice;
+				suitabilityScoreToBeat = currentDeviceSuitabilityScore;
+			}
+		}
+
+		if (m_vulkanPhysicalDevice == nullptr)
+		{
+			throw std::runtime_error("Found Vulkan physical devices, but none were suitable");
+		}
+	}
+
+	uint32_t CalculateVulkanDeviceSuitability(VkPhysicalDevice deviceToCheck)
+	{
+		uint32_t suitabilityScore = 0;
+		VkPhysicalDeviceProperties deviceProperties = {};
+		VkPhysicalDeviceFeatures deviceFeatures = {};
+		vkGetPhysicalDeviceProperties(deviceToCheck, &deviceProperties);
+		vkGetPhysicalDeviceFeatures(deviceToCheck, &deviceFeatures);
+		if (deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)
+		{
+			suitabilityScore += 1000;
+		}
+		suitabilityScore += deviceProperties.limits.maxImageDimension2D;
+
+		// return 0 if note good enough checks at end
+		if (!deviceFeatures.geometryShader)
+		{
+			suitabilityScore = 0;
+		}
+
+		return suitabilityScore;
+	}
+
 	void MainLoop()
 	{
 		while (!glfwWindowShouldClose(m_window))
@@ -238,6 +293,7 @@ private:
 
 	GLFWwindow* m_window;
 	VkInstance m_vulkanInstance;
+	VkPhysicalDevice m_vulkanPhysicalDevice; //note that this gets deleted when destroying m_vulkanInstance 
 	VkDebugUtilsMessengerEXT m_vulkanDebugMessenger;
 	const bool m_useVulkanValidationLayers;
 };
