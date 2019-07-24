@@ -1,3 +1,4 @@
+#include <optional>
 #include <iostream>
 #include <string> // needed for checking validation layers
 #include <vector>
@@ -35,6 +36,16 @@ public:
 		Shutdown();
 	}
 private:
+	struct QueueFamilyIndices
+	{
+		std::optional<uint32_t> m_graphicsFamilyIndex;
+
+		bool ValueReady()
+		{
+			return m_graphicsFamilyIndex.has_value();
+		}
+	};
+
 	void Init()
 	{
 		try
@@ -195,7 +206,6 @@ private:
 		std::vector<VkPhysicalDevice> devices(deviceCount);
 		vkEnumeratePhysicalDevices(m_vulkanInstance, &deviceCount, devices.data());
 
-		// TODO: come back to this on https://vulkan-tutorial.com/Drawing_a_triangle/Setup/Physical_devices_and_queue_families, use the device score system
 		uint32_t suitabilityScoreToBeat = 0;
 		uint32_t currentDeviceSuitabilityScore = 0;
 		for (const VkPhysicalDevice& currentDevice : devices)
@@ -212,6 +222,42 @@ private:
 		{
 			throw std::runtime_error("Found Vulkan physical devices, but none were suitable");
 		}
+
+		m_graphicsQueueFamilyIndices = FindQueueFamilies(m_vulkanPhysicalDevice);
+
+		if (!m_graphicsQueueFamilyIndices.ValueReady())
+		{
+			throw std::runtime_error("Found Vulkan physical devices, but the device didn't support queue families");
+		}
+	}
+
+	QueueFamilyIndices FindQueueFamilies(VkPhysicalDevice device)
+	{
+		// finds command queues, just care about graphics. could expand to 
+		QueueFamilyIndices indices;
+		uint32_t nQueueFamilies = 0;
+		vkGetPhysicalDeviceQueueFamilyProperties(device, &nQueueFamilies, nullptr);
+		if (nQueueFamilies == 0)
+		{
+			throw std::runtime_error("No Vulkan Queue families found");
+		}
+		std::vector<VkQueueFamilyProperties> queueFamilies(nQueueFamilies);
+		vkGetPhysicalDeviceQueueFamilyProperties(device, &nQueueFamilies, queueFamilies.data());
+
+		uint32_t i = 0;
+		for (const VkQueueFamilyProperties& currentQueueFamilyProperties : queueFamilies)
+		{
+			if (currentQueueFamilyProperties.queueCount > 0 && currentQueueFamilyProperties.queueFlags & VK_QUEUE_GRAPHICS_BIT)
+			{
+				indices.m_graphicsFamilyIndex = i;
+			}
+			if (indices.ValueReady())
+			{
+				return indices;
+			}
+			++i;
+		}
+
 	}
 
 	uint32_t CalculateVulkanDeviceSuitability(VkPhysicalDevice deviceToCheck)
@@ -293,7 +339,8 @@ private:
 
 	GLFWwindow* m_window;
 	VkInstance m_vulkanInstance;
-	VkPhysicalDevice m_vulkanPhysicalDevice; //note that this gets deleted when destroying m_vulkanInstance 
+	VkPhysicalDevice m_vulkanPhysicalDevice; //note that this gets deleted when destroying m_vulkanInstance
+	QueueFamilyIndices m_graphicsQueueFamilyIndices;
 	VkDebugUtilsMessengerEXT m_vulkanDebugMessenger;
 	const bool m_useVulkanValidationLayers;
 };
