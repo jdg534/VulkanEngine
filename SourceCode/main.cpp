@@ -9,6 +9,11 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
+#ifdef _WINDOWS
+#include <Windows.h>
+#endif // _WINDOWS
+
+
 static const std::vector<const char*> s_validationLayers = { "VK_LAYER_KHRONOS_validation" }; // following tutorial structure, refactor once we're got a triangle on screen
 // VK_LAYER_LUNARG_standard_validation found, check if that can be used as an alternative. could need to update drivers
 class VulkanApp
@@ -56,7 +61,11 @@ private:
 		}
 		catch (const std::exception& ex)
 		{
-			// if WIN32 OutputDebugString(), figure out Unix like equivelent
+#ifdef _WINDOWS
+			OutputDebugString(ex.what());
+#else
+			// non windows code here
+#endif
 
 		}
 	}
