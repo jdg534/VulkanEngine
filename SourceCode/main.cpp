@@ -9,7 +9,7 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
-static const std::vector<const char*> validationLayers = { "VK_LAYER_KHRONOS_validation" }; // following tutorial structure, refactor once we're got a triangle on screen
+static const std::vector<const char*> s_validationLayers = { "VK_LAYER_KHRONOS_validation" }; // following tutorial structure, refactor once we're got a triangle on screen
 // VK_LAYER_LUNARG_standard_validation found, check if that can be used as an alternative. could need to update drivers
 class VulkanApp
 {
@@ -18,6 +18,7 @@ public:
 		: m_window(nullptr)
 		, m_vulkanInstance(nullptr)
 		, m_vulkanPhysicalDevice(nullptr)
+		, m_vulkanLogicalDevice(nullptr)
 #if (NDEBUG)
 		, m_useVulkanValidationLayers(false) // release build
 #else
@@ -72,6 +73,7 @@ private:
 		CreateVulkanInstance();
 		QueryVulkanExtentions();
 		SelectVulkanDevice();
+		CreateLogicalVulkanDevice();
 	}
 
 	bool AreVulkanValidationLayersSupported()
@@ -82,7 +84,7 @@ private:
 		std::vector<VkLayerProperties> availableLayers(nLayers);
 		vkEnumerateInstanceLayerProperties(&nLayers, availableLayers.data());
 
-		const std::string targetLayerStr = std::string(validationLayers[0]);
+		const std::string targetLayerStr = std::string(s_validationLayers[0]);
 		bool validationLayerFound = false;
 		for (uint32_t i = 0; i < nLayers && !validationLayerFound; ++i)
 		{
@@ -137,8 +139,8 @@ private:
 		if (m_useVulkanValidationLayers)
 		{
 			
-			instanceCreateInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
-			instanceCreateInfo.ppEnabledLayerNames = validationLayers.data();
+			instanceCreateInfo.enabledLayerCount = static_cast<uint32_t>(s_validationLayers.size());
+			instanceCreateInfo.ppEnabledLayerNames = s_validationLayers.data();
 			PopulateVulkanDebugMessengerCreateInfo(dbgCreateInfo);
 			instanceCreateInfo.pNext = &dbgCreateInfo;
 		}
@@ -229,6 +231,8 @@ private:
 		{
 			throw std::runtime_error("Found Vulkan physical devices, but the device didn't support queue families");
 		}
+
+		CreateVulkanInstance();
 	}
 
 	QueueFamilyIndices FindQueueFamilies(VkPhysicalDevice device)
@@ -257,7 +261,7 @@ private:
 			}
 			++i;
 		}
-
+		return indices;
 	}
 
 	uint32_t CalculateVulkanDeviceSuitability(VkPhysicalDevice deviceToCheck)
@@ -282,6 +286,42 @@ private:
 		return suitabilityScore;
 	}
 
+	void CreateLogicalVulkanDevice()
+	{
+		assert(m_graphicsQueueFamilyIndices.ValueReady());
+		VkDeviceQueueCreateInfo queueCreateInfo = {};
+		queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+		queueCreateInfo.queueFamilyIndex = m_graphicsQueueFamilyIndices.m_graphicsFamilyIndex.value();
+		queueCreateInfo.queueCount = 1;
+
+		float queuePriority = 1.0f;
+		queueCreateInfo.pQueuePriorities = &queuePriority;
+
+		VkPhysicalDeviceFeatures deviceFeatures = {}; // populate with stuff from vkGetPhysicalDeviceFeatures(), for now keep it simple
+		
+		VkDeviceCreateInfo createInfo = {};
+		createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+		createInfo.pQueueCreateInfos = &queueCreateInfo;
+		createInfo.queueCreateInfoCount = 1;
+		createInfo.pEnabledFeatures = &deviceFeatures;
+		createInfo.enabledExtensionCount = 0;
+
+		if (m_useVulkanValidationLayers)
+		{
+			createInfo.enabledLayerCount = static_cast<uint32_t>(s_validationLayers.size());
+			createInfo.ppEnabledLayerNames = s_validationLayers.data();
+		}
+		else
+		{
+			createInfo.enabledLayerCount = 0;
+		}
+
+		if (vkCreateDevice(m_vulkanPhysicalDevice, &createInfo, nullptr, &m_vulkanLogicalDevice) != VK_SUCCESS)
+		{
+			throw std::runtime_error("failed to create logical vulkan device!");
+		}
+	}
+
 	void MainLoop()
 	{
 		while (!glfwWindowShouldClose(m_window))
@@ -289,11 +329,16 @@ private:
 			glfwPollEvents();
 		}
 	}
+
 	void Shutdown()
 	{
 		if (m_useVulkanValidationLayers)
 		{
 			DestroyDebugUtilsMessengerEXT(m_vulkanInstance, m_vulkanDebugMessenger, nullptr);
+		}
+		if (m_vulkanLogicalDevice)
+		{
+			vkDestroyDevice(m_vulkanLogicalDevice, nullptr);
 		}
 		vkDestroyInstance(m_vulkanInstance, nullptr);
 		glfwDestroyWindow(m_window);
@@ -340,6 +385,7 @@ private:
 	GLFWwindow* m_window;
 	VkInstance m_vulkanInstance;
 	VkPhysicalDevice m_vulkanPhysicalDevice; //note that this gets deleted when destroying m_vulkanInstance
+	VkDevice m_vulkanLogicalDevice;
 	QueueFamilyIndices m_graphicsQueueFamilyIndices;
 	VkDebugUtilsMessengerEXT m_vulkanDebugMessenger;
 	const bool m_useVulkanValidationLayers;
