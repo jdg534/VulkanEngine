@@ -24,6 +24,7 @@ public:
 		, m_vulkanInstance(nullptr)
 		, m_vulkanPhysicalDevice(nullptr)
 		, m_vulkanLogicalDevice(nullptr)
+		, m_graphicsQueue(nullptr)
 #if (NDEBUG)
 		, m_useVulkanValidationLayers(false) // release build
 #else
@@ -329,6 +330,12 @@ private:
 		{
 			throw std::runtime_error("failed to create logical vulkan device!");
 		}
+
+		vkGetDeviceQueue(m_vulkanLogicalDevice, m_graphicsQueueFamilyIndices.m_graphicsFamilyIndex.value(), 0, &m_graphicsQueue);
+		if (m_graphicsQueue == nullptr)
+		{
+			throw std::runtime_error("failed to get the graphics queue!");
+		}
 	}
 
 	void MainLoop()
@@ -347,7 +354,7 @@ private:
 		}
 		if (m_vulkanLogicalDevice)
 		{
-			vkDestroyDevice(m_vulkanLogicalDevice, nullptr);
+			vkDestroyDevice(m_vulkanLogicalDevice, nullptr); // note that this also deletes the graphics queue
 		}
 		vkDestroyInstance(m_vulkanInstance, nullptr);
 		glfwDestroyWindow(m_window);
@@ -395,6 +402,7 @@ private:
 	VkInstance m_vulkanInstance;
 	VkPhysicalDevice m_vulkanPhysicalDevice; //note that this gets deleted when destroying m_vulkanInstance
 	VkDevice m_vulkanLogicalDevice;
+	VkQueue m_graphicsQueue;
 	QueueFamilyIndices m_graphicsQueueFamilyIndices;
 	VkDebugUtilsMessengerEXT m_vulkanDebugMessenger;
 	const bool m_useVulkanValidationLayers;
