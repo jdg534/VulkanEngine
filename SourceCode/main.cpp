@@ -7,7 +7,14 @@
 
 #include <glm/glm.hpp>
 #define GLFW_INCLUDE_VULKAN
+#ifdef _WINDOWS
+#define VK_USE_PLATFORM_WIN32_KHR
+#define GLFW_EXPOSE_NATIVE_WGL
+#define GLFW_EXPOSE_NATIVE_WIN32
+#endif // _WINDOWS
 #include <GLFW/glfw3.h>
+#include <GLFW/glfw3native.h>
+
 
 #ifdef _WINDOWS
 #include <Windows.h>
@@ -25,6 +32,7 @@ public:
 		, m_vulkanPhysicalDevice(nullptr)
 		, m_vulkanLogicalDevice(nullptr)
 		, m_graphicsQueue(nullptr)
+		, m_surfaceToDrawTo(nullptr)
 #if (NDEBUG)
 		, m_useVulkanValidationLayers(false) // release build
 #else
@@ -84,6 +92,7 @@ private:
 		QueryVulkanExtentions();
 		SelectVulkanDevice();
 		CreateLogicalVulkanDevice();
+		CreateSurfaceToDrawTo();
 	}
 
 	bool AreVulkanValidationLayersSupported()
@@ -338,6 +347,26 @@ private:
 		}
 	}
 
+	void CreateSurfaceToDrawTo()
+	{
+#ifdef _WINDOWS
+		// m_surfaceToDrawTo
+		VkWin32SurfaceCreateInfoKHR surfaceCreateInfo = {};
+		surfaceCreateInfo.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
+		surfaceCreateInfo.hwnd = glfwGetWin32Window(m_window);
+		surfaceCreateInfo.hinstance = GetModuleHandle(nullptr);
+		if (vkCreateWin32SurfaceKHR(m_vulkanInstance, &surfaceCreateInfo, nullptr, &m_surfaceToDrawTo) != VK_SUCCESS)
+		{
+			throw std::runtime_error("Failed to create surface to draw to");
+		}
+
+		// glfwCreateWindowSurface() easier way to do the above, function part of glfw...
+
+#else
+		// non windows equivelent code here
+#endif // _WINDOWS
+	}
+
 	void MainLoop()
 	{
 		while (!glfwWindowShouldClose(m_window))
@@ -355,6 +384,10 @@ private:
 		if (m_vulkanLogicalDevice)
 		{
 			vkDestroyDevice(m_vulkanLogicalDevice, nullptr); // note that this also deletes the graphics queue
+		}
+		if (m_surfaceToDrawTo)
+		{
+			vkDestroySurfaceKHR(m_vulkanInstance, m_surfaceToDrawTo, nullptr);
 		}
 		vkDestroyInstance(m_vulkanInstance, nullptr);
 		glfwDestroyWindow(m_window);
@@ -406,6 +439,10 @@ private:
 	QueueFamilyIndices m_graphicsQueueFamilyIndices;
 	VkDebugUtilsMessengerEXT m_vulkanDebugMessenger;
 	const bool m_useVulkanValidationLayers;
+
+	// window surface creation variables
+	VkSurfaceKHR m_surfaceToDrawTo;
+
 };
 
 
