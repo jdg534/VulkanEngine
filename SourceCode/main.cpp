@@ -54,10 +54,11 @@ private:
 	struct QueueFamilyIndices
 	{
 		std::optional<uint32_t> m_graphicsFamilyIndex;
+		std::optional<uint32_t> m_presentFamilyIndex;
 
 		bool ValueReady()
 		{
-			return m_graphicsFamilyIndex.has_value();
+			return m_graphicsFamilyIndex.has_value() && m_presentFamilyIndex.has_value();
 		}
 	};
 
@@ -89,10 +90,12 @@ private:
 	void InitVulkan()
 	{
 		CreateVulkanInstance();
-		QueryVulkanExtentions();
+		SetupVulkanDebugMessenger();
+		CreateSurfaceToDrawTo();
+		QueryVulkanExtentions();		
 		SelectVulkanDevice();
 		CreateLogicalVulkanDevice();
-		CreateSurfaceToDrawTo();
+		
 	}
 
 	bool AreVulkanValidationLayersSupported()
@@ -214,6 +217,27 @@ private:
 		}
 	}
 
+	void CreateSurfaceToDrawTo()
+	{
+		// this needs to be called before SelectVulkanDevice()
+#ifdef _WINDOWS
+		// m_surfaceToDrawTo
+		VkWin32SurfaceCreateInfoKHR surfaceCreateInfo = {};
+		surfaceCreateInfo.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
+		surfaceCreateInfo.hwnd = glfwGetWin32Window(m_window);
+		surfaceCreateInfo.hinstance = GetModuleHandle(nullptr);
+		if (vkCreateWin32SurfaceKHR(m_vulkanInstance, &surfaceCreateInfo, nullptr, &m_surfaceToDrawTo) != VK_SUCCESS)
+		{
+			throw std::runtime_error("Failed to create surface to draw to");
+		}
+
+		// glfwCreateWindowSurface() easier way to do the above, function part of glfw...
+
+#else
+		// non windows equivelent code here
+#endif // _WINDOWS
+	}
+
 	void SelectVulkanDevice()
 	{
 		uint32_t deviceCount = 0;
@@ -270,9 +294,16 @@ private:
 		uint32_t i = 0;
 		for (const VkQueueFamilyProperties& currentQueueFamilyProperties : queueFamilies)
 		{
+			VkBool32  gotPresentSupport = false;
+			vkGetPhysicalDeviceSurfaceSupportKHR(device, i, m_surfaceToDrawTo, &gotPresentSupport);
+
 			if (currentQueueFamilyProperties.queueCount > 0 && currentQueueFamilyProperties.queueFlags & VK_QUEUE_GRAPHICS_BIT)
 			{
 				indices.m_graphicsFamilyIndex = i;
+			}
+			if (currentQueueFamilyProperties.queueCount > 0 && gotPresentSupport)
+			{
+				indices.m_presentFamilyIndex = i;
 			}
 			if (indices.ValueReady())
 			{
@@ -345,26 +376,6 @@ private:
 		{
 			throw std::runtime_error("failed to get the graphics queue!");
 		}
-	}
-
-	void CreateSurfaceToDrawTo()
-	{
-#ifdef _WINDOWS
-		// m_surfaceToDrawTo
-		VkWin32SurfaceCreateInfoKHR surfaceCreateInfo = {};
-		surfaceCreateInfo.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
-		surfaceCreateInfo.hwnd = glfwGetWin32Window(m_window);
-		surfaceCreateInfo.hinstance = GetModuleHandle(nullptr);
-		if (vkCreateWin32SurfaceKHR(m_vulkanInstance, &surfaceCreateInfo, nullptr, &m_surfaceToDrawTo) != VK_SUCCESS)
-		{
-			throw std::runtime_error("Failed to create surface to draw to");
-		}
-
-		// glfwCreateWindowSurface() easier way to do the above, function part of glfw...
-
-#else
-		// non windows equivelent code here
-#endif // _WINDOWS
 	}
 
 	void MainLoop()
