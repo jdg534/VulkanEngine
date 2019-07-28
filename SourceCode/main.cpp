@@ -2,6 +2,7 @@
 #include <iostream>
 #include <string> // needed for checking validation layers
 #include <vector>
+#include <set>
 #include <cassert>
 #include <exception>
 
@@ -33,6 +34,7 @@ public:
 		, m_vulkanLogicalDevice(nullptr)
 		, m_graphicsQueue(nullptr)
 		, m_surfaceToDrawTo(nullptr)
+		, m_presentQueue(nullptr)
 #if (NDEBUG)
 		, m_useVulkanValidationLayers(false) // release build
 #else
@@ -274,8 +276,6 @@ private:
 		{
 			throw std::runtime_error("Found Vulkan physical devices, but the device didn't support queue families");
 		}
-
-		CreateVulkanInstance();
 	}
 
 	QueueFamilyIndices FindQueueFamilies(VkPhysicalDevice device)
@@ -339,20 +339,25 @@ private:
 	void CreateLogicalVulkanDevice()
 	{
 		assert(m_graphicsQueueFamilyIndices.ValueReady());
-		VkDeviceQueueCreateInfo queueCreateInfo = {};
-		queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-		queueCreateInfo.queueFamilyIndex = m_graphicsQueueFamilyIndices.m_graphicsFamilyIndex.value();
-		queueCreateInfo.queueCount = 1;
-
-		float queuePriority = 1.0f;
-		queueCreateInfo.pQueuePriorities = &queuePriority;
+		std::set<uint32_t> queueFamilyIndices = { m_graphicsQueueFamilyIndices.m_graphicsFamilyIndex.value(), m_graphicsQueueFamilyIndices.m_presentFamilyIndex.value() };
+		const float queuePriority = 1.0f;
+		std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
+		for (uint32_t queueFamilyIndex : queueFamilyIndices)
+		{
+			VkDeviceQueueCreateInfo queueCreateInfo = {};
+			queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+			queueCreateInfo.queueFamilyIndex = m_graphicsQueueFamilyIndices.m_graphicsFamilyIndex.value();
+			queueCreateInfo.queueCount = 1;
+			queueCreateInfo.pQueuePriorities = &queuePriority;
+			queueCreateInfos.push_back(queueCreateInfo);
+		}
 
 		VkPhysicalDeviceFeatures deviceFeatures = {}; // populate with stuff from vkGetPhysicalDeviceFeatures(), for now keep it simple
 		
 		VkDeviceCreateInfo createInfo = {};
 		createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-		createInfo.pQueueCreateInfos = &queueCreateInfo;
-		createInfo.queueCreateInfoCount = 1;
+		createInfo.pQueueCreateInfos = queueCreateInfos.data();
+		createInfo.queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size());
 		createInfo.pEnabledFeatures = &deviceFeatures;
 		createInfo.enabledExtensionCount = 0;
 
@@ -372,9 +377,14 @@ private:
 		}
 
 		vkGetDeviceQueue(m_vulkanLogicalDevice, m_graphicsQueueFamilyIndices.m_graphicsFamilyIndex.value(), 0, &m_graphicsQueue);
-		if (m_graphicsQueue == nullptr)
+		vkGetDeviceQueue(m_vulkanLogicalDevice, m_graphicsQueueFamilyIndices.m_presentFamilyIndex.value(), 0, &m_presentQueue);
+		if (m_graphicsQueue == nullptr || m_presentQueue == nullptr)
 		{
-			throw std::runtime_error("failed to get the graphics queue!");
+			throw std::runtime_error("failed to get the graphics or present queue!");
+		}		
+		else if (m_graphicsQueue == m_presentQueue)
+		{
+			std::cout << "The Vulkan Graphics queue and the Present queue are the same queue" << std::endl;
 		}
 	}
 
@@ -453,6 +463,7 @@ private:
 
 	// window surface creation variables
 	VkSurfaceKHR m_surfaceToDrawTo;
+	VkQueue m_presentQueue;
 
 };
 
