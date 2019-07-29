@@ -23,7 +23,8 @@
 
 
 static const std::vector<const char*> s_validationLayers = { "VK_LAYER_KHRONOS_validation" }; // following tutorial structure, refactor once we're got a triangle on screen
-// VK_LAYER_LUNARG_standard_validation found, check if that can be used as an alternative. could need to update drivers
+static const std::vector<const char*> s_requiredPhysicalDeviceExtentions = { VK_KHR_SWAPCHAIN_EXTENSION_NAME }; // these constraints are meant to be used on a created device, not during device creation
+
 class VulkanApp
 {
 public:
@@ -130,6 +131,7 @@ private:
 		{
 			extCStrs.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 		}
+
 		return extCStrs;
 	}
 
@@ -333,7 +335,34 @@ private:
 			suitabilityScore = 0;
 		}
 
+		const bool deviceMeetsMinSupportExtentions = DeviceHasMinimumExtentionSupportLevel(deviceToCheck);
+		if (!deviceMeetsMinSupportExtentions)
+		{
+			suitabilityScore = 0;
+		}
+
 		return suitabilityScore;
+	}
+
+	// refactor to DeviceHasMinimumExtentionSupportLevel
+	bool DeviceHasMinimumExtentionSupportLevel(VkPhysicalDevice deviceToCheck)
+	{
+		uint32_t nExtentions = 0;
+		vkEnumerateDeviceExtensionProperties(deviceToCheck, nullptr, &nExtentions, nullptr);
+		if (nExtentions == 0)
+		{
+			return false;
+		}
+		std::vector<VkExtensionProperties> extentionsPresent(nExtentions);
+		vkEnumerateDeviceExtensionProperties(deviceToCheck, nullptr, &nExtentions, extentionsPresent.data());
+		std::set<std::string> requiredExtentionsSet(s_requiredPhysicalDeviceExtentions.begin(), s_requiredPhysicalDeviceExtentions.end());
+
+		for (const VkExtensionProperties& extention : extentionsPresent)
+		{
+			requiredExtentionsSet.erase(extention.extensionName);
+		}
+
+		return requiredExtentionsSet.empty(); // if the set isn't empty there's a required extention that isn't supported
 	}
 
 	void CreateLogicalVulkanDevice()
