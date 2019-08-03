@@ -1,10 +1,12 @@
 #include <optional>
 #include <iostream>
 #include <string> // needed for checking validation layers
+#include <algorithm>
 #include <vector>
 #include <set>
 #include <cassert>
 #include <exception>
+#include <cstdlib>
 
 #include <glm/glm.hpp>
 #define GLFW_INCLUDE_VULKAN
@@ -29,13 +31,16 @@ class VulkanApp
 {
 public:
 	VulkanApp()
-		: m_window(nullptr)
+		: c_windowWidth(800)
+		, c_windowHeight(600)
+		, m_window(nullptr)
 		, m_vulkanInstance(nullptr)
 		, m_vulkanPhysicalDevice(nullptr)
 		, m_vulkanLogicalDevice(nullptr)
 		, m_graphicsQueue(nullptr)
 		, m_surfaceToDrawTo(nullptr)
 		, m_presentQueue(nullptr)
+		, m_swapChain(nullptr)
 #if (NDEBUG)
 		, m_useVulkanValidationLayers(false) // release build
 #else
@@ -65,6 +70,13 @@ private:
 		}
 	};
 
+	struct SwapChainSupportDetails
+	{
+		VkSurfaceCapabilitiesKHR capabilities;
+		std::vector<VkSurfaceFormatKHR> formats;
+		std::vector<VkPresentModeKHR> presentModes;
+	};
+
 	void Init()
 	{
 		try
@@ -88,7 +100,7 @@ private:
 
 		glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 		glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
-		m_window = glfwCreateWindow(800, 600, "Vulkan window", nullptr, nullptr);
+		m_window = glfwCreateWindow(c_windowWidth, c_windowHeight, "Vulkan window", nullptr, nullptr);
 	}
 	void InitVulkan()
 	{
@@ -98,7 +110,7 @@ private:
 		QueryVulkanExtentions();		
 		SelectVulkanDevice();
 		CreateLogicalVulkanDevice();
-		
+		CreateSwapChain();
 	}
 
 	bool AreVulkanValidationLayersSupported()
@@ -341,10 +353,15 @@ private:
 			suitabilityScore = 0;
 		}
 
+		bool swapChainSupportNeedsMet = DeviceHasMinimumSwapChainSupportLevel(deviceToCheck);
+		if (!swapChainSupportNeedsMet)
+		{
+			suitabilityScore = 0;
+		}
+
 		return suitabilityScore;
 	}
 
-	// refactor to DeviceHasMinimumExtentionSupportLevel
 	bool DeviceHasMinimumExtentionSupportLevel(VkPhysicalDevice deviceToCheck)
 	{
 		uint32_t nExtentions = 0;
@@ -363,6 +380,12 @@ private:
 		}
 
 		return requiredExtentionsSet.empty(); // if the set isn't empty there's a required extention that isn't supported
+	}
+
+	bool DeviceHasMinimumSwapChainSupportLevel(VkPhysicalDevice device)
+	{
+		SwapChainSupportDetails swapChainSupport = QueryPhysicalDeviceSwapChainSupport(device);
+		return !swapChainSupport.formats.empty() && !swapChainSupport.presentModes.empty();
 	}
 
 	void CreateLogicalVulkanDevice()
@@ -388,7 +411,8 @@ private:
 		createInfo.pQueueCreateInfos = queueCreateInfos.data();
 		createInfo.queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size());
 		createInfo.pEnabledFeatures = &deviceFeatures;
-		createInfo.enabledExtensionCount = 0;
+		createInfo.enabledExtensionCount = static_cast<uint32_t>(s_requiredPhysicalDeviceExtentions.size());
+		createInfo.ppEnabledExtensionNames = s_requiredPhysicalDeviceExtentions.data();
 
 		if (m_useVulkanValidationLayers)
 		{
@@ -417,6 +441,116 @@ private:
 		}
 	}
 
+	SwapChainSupportDetails QueryPhysicalDeviceSwapChainSupport(VkPhysicalDevice physicalDevice)
+	{
+		SwapChainSupportDetails details;
+		vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physicalDevice, m_surfaceToDrawTo, &details.capabilities);
+		uint32_t nSupportedFormats = 0;
+		vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, m_surfaceToDrawTo, &nSupportedFormats, nullptr);
+		if (nSupportedFormats != 0)
+		{
+			details.formats.resize(nSupportedFormats);
+			vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, m_surfaceToDrawTo, &nSupportedFormats, details.formats.data());
+		}
+
+		uint32_t nSupportedPresentModes = 0;
+		vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice, m_surfaceToDrawTo, &nSupportedPresentModes, nullptr);
+		if (nSupportedPresentModes != 0)
+		{
+			details.presentModes.resize(nSupportedPresentModes);
+			vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice, m_surfaceToDrawTo, &nSupportedPresentModes, details.presentModes.data());
+		}
+
+		return details;
+	}
+
+	static inline VkSurfaceFormatKHR SelectSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats) 
+	{
+		for (const VkSurfaceFormatKHR& format : availableFormats)
+		{
+			if (format.format == VK_FORMAT_B8G8R8A8_UNORM && VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
+			{
+				return format;
+			}
+		}
+		return availableFormats[0]; // return first element if can't pick the optimal surface format
+	}
+
+	static inline VkPresentModeKHR SelectPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes)
+	{
+		for (const VkPresentModeKHR& currentPresentMode: availablePresentModes)
+		{
+			if (currentPresentMode == VK_PRESENT_MODE_MAILBOX_KHR)
+			{
+				return currentPresentMode;
+			}
+		}
+		return VK_PRESENT_MODE_FIFO_KHR;
+	}
+
+	VkExtent2D ChooseSwapExtent(const VkSurfaceCapabilitiesKHR& surfaceCapabilities)
+	{
+		// reduced due to compile errors
+		VkExtent2D extentToUse = { c_windowWidth, c_windowHeight };
+		return extentToUse;
+	}
+
+	void CreateSwapChain()
+	{
+		// validation for the swap chain support will have been used before reaching this function
+		SwapChainSupportDetails supportedSwapChainDetails = QueryPhysicalDeviceSwapChainSupport(m_vulkanPhysicalDevice);
+		VkSurfaceFormatKHR formatToCreateWith = SelectSwapSurfaceFormat(supportedSwapChainDetails.formats);
+		VkPresentModeKHR presentModeToCreateWith = SelectPresentMode(supportedSwapChainDetails.presentModes);
+		VkExtent2D extent = ChooseSwapExtent(supportedSwapChainDetails.capabilities);
+		uint32_t imageCountToCreateWith = supportedSwapChainDetails.capabilities.minImageCount + 1;
+		if (supportedSwapChainDetails.capabilities.maxImageCount > 0 && imageCountToCreateWith > supportedSwapChainDetails.capabilities.maxImageCount) {
+			imageCountToCreateWith = supportedSwapChainDetails.capabilities.maxImageCount;
+		}
+		VkSwapchainCreateInfoKHR swapChainCreateInfo = {};
+		swapChainCreateInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+		swapChainCreateInfo.surface = m_surfaceToDrawTo;
+		swapChainCreateInfo.minImageCount = imageCountToCreateWith;
+		swapChainCreateInfo.imageFormat = formatToCreateWith.format;
+		swapChainCreateInfo.imageColorSpace = formatToCreateWith.colorSpace;
+		swapChainCreateInfo.imageExtent = extent;
+		swapChainCreateInfo.imageArrayLayers = 1;
+		swapChainCreateInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+
+		QueueFamilyIndices indicesStruct = FindQueueFamilies(m_vulkanPhysicalDevice);
+		uint32_t queueIndeices[] = { indicesStruct.m_graphicsFamilyIndex.value(), indicesStruct.m_presentFamilyIndex.value() };
+
+		if (indicesStruct.m_graphicsFamilyIndex != indicesStruct.m_presentFamilyIndex)
+		{
+			swapChainCreateInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
+			swapChainCreateInfo.queueFamilyIndexCount = 2;
+			swapChainCreateInfo.pQueueFamilyIndices = queueIndeices;
+		}
+		else
+		{
+			swapChainCreateInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+			swapChainCreateInfo.queueFamilyIndexCount = 0; // Optional
+			swapChainCreateInfo.pQueueFamilyIndices = nullptr; // Optional
+		}
+
+		swapChainCreateInfo.preTransform = supportedSwapChainDetails.capabilities.currentTransform;
+		swapChainCreateInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+		swapChainCreateInfo.presentMode = presentModeToCreateWith;
+		swapChainCreateInfo.clipped = VK_TRUE;
+		swapChainCreateInfo.oldSwapchain = VK_NULL_HANDLE;
+
+#ifdef _WINDOWS
+		// _putenv("DISABLE_VK_LAYER_VALVE_steam_overlay_1=1");
+#endif // _WINDOWS
+
+		// see: https://vulkan-tutorial.com/FAQ
+		// 
+
+		if (vkCreateSwapchainKHR(m_vulkanLogicalDevice, &swapChainCreateInfo, nullptr, &m_swapChain) != VK_SUCCESS)
+		{
+			throw std::runtime_error("Failed to create swap chain");
+		}
+	}
+
 	void MainLoop()
 	{
 		while (!glfwWindowShouldClose(m_window))
@@ -430,6 +564,10 @@ private:
 		if (m_useVulkanValidationLayers)
 		{
 			DestroyDebugUtilsMessengerEXT(m_vulkanInstance, m_vulkanDebugMessenger, nullptr);
+		}
+		if (m_swapChain)
+		{
+			vkDestroySwapchainKHR(m_vulkanLogicalDevice, m_swapChain, nullptr);
 		}
 		if (m_vulkanLogicalDevice)
 		{
@@ -481,6 +619,8 @@ private:
 	}
 	// end of debug functions
 
+	const uint32_t c_windowWidth;
+	const uint32_t c_windowHeight;
 	GLFWwindow* m_window;
 	VkInstance m_vulkanInstance;
 	VkPhysicalDevice m_vulkanPhysicalDevice; //note that this gets deleted when destroying m_vulkanInstance
@@ -493,6 +633,7 @@ private:
 	// window surface creation variables
 	VkSurfaceKHR m_surfaceToDrawTo;
 	VkQueue m_presentQueue;
+	VkSwapchainKHR m_swapChain;
 
 };
 
