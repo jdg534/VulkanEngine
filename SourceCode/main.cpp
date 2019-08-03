@@ -543,12 +543,18 @@ private:
 #endif // _WINDOWS
 
 		// see: https://vulkan-tutorial.com/FAQ
-		// 
-
 		if (vkCreateSwapchainKHR(m_vulkanLogicalDevice, &swapChainCreateInfo, nullptr, &m_swapChain) != VK_SUCCESS)
 		{
 			throw std::runtime_error("Failed to create swap chain");
 		}
+
+		// get additional swap chain info post creation
+		uint32_t nSwapChainImagesPostCreation = 0;
+		vkGetSwapchainImagesKHR(m_vulkanLogicalDevice, m_swapChain, &nSwapChainImagesPostCreation, nullptr);
+		m_swapChainImages.resize(nSwapChainImagesPostCreation);
+		vkGetSwapchainImagesKHR(m_vulkanLogicalDevice, m_swapChain, &nSwapChainImagesPostCreation, m_swapChainImages.data());
+		m_swapChainImageFormat = formatToCreateWith.format;
+		m_swapChainExtent = extent;
 	}
 
 	void MainLoop()
@@ -633,8 +639,12 @@ private:
 	// window surface creation variables
 	VkSurfaceKHR m_surfaceToDrawTo;
 	VkQueue m_presentQueue;
+	
+	// swap chain variables, note need the enable to extentions
 	VkSwapchainKHR m_swapChain;
-
+	std::vector<VkImage> m_swapChainImages;
+	VkFormat m_swapChainImageFormat;
+	VkExtent2D m_swapChainExtent;
 };
 
 
