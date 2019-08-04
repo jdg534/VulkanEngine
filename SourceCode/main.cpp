@@ -111,6 +111,7 @@ private:
 		SelectVulkanDevice();
 		CreateLogicalVulkanDevice();
 		CreateSwapChain();
+		CreateImageViews();
 	}
 
 	bool AreVulkanValidationLayersSupported()
@@ -557,6 +558,35 @@ private:
 		m_swapChainExtent = extent;
 	}
 
+	void CreateImageViews()
+	{
+		const size_t nSwapChainImages = m_swapChainImages.size();
+		m_swapChainImageViews.resize(nSwapChainImages);
+		for (size_t i = 0; i < nSwapChainImages; ++i)
+		{
+			VkImageViewCreateInfo imgViewCreateInfo = {};
+			imgViewCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+			imgViewCreateInfo.image = m_swapChainImages[i];
+			imgViewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+			imgViewCreateInfo.format = m_swapChainImageFormat;
+			imgViewCreateInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+			imgViewCreateInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+			imgViewCreateInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+			imgViewCreateInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+			imgViewCreateInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			imgViewCreateInfo.subresourceRange.baseMipLevel = 0;
+			imgViewCreateInfo.subresourceRange.levelCount = 1;
+			imgViewCreateInfo.subresourceRange.baseArrayLayer = 0;
+			imgViewCreateInfo.subresourceRange.layerCount = 1;
+
+			if (vkCreateImageView(m_vulkanLogicalDevice, &imgViewCreateInfo, nullptr, &m_swapChainImageViews[i]) != VK_SUCCESS)
+			{
+				throw std::runtime_error("Failed to create an image view");
+			}
+		}
+	}
+	
+
 	void MainLoop()
 	{
 		while (!glfwWindowShouldClose(m_window))
@@ -567,6 +597,24 @@ private:
 
 	void Shutdown()
 	{
+		if (m_swapChainImageViews.size() > 0)
+		{
+			for (const VkImageView& imgView : m_swapChainImageViews)
+			{
+				vkDestroyImageView(m_vulkanLogicalDevice, imgView, nullptr);
+			}
+			m_swapChainImageViews.clear();
+		}
+		/* these get deleted when the swap chain are deleted
+		if (m_swapChainImages.size() > 0)
+		{
+			for (const VkImage& img : m_swapChainImages)
+			{
+				vkDestroyImage(m_vulkanLogicalDevice, img, nullptr);
+			}
+			m_swapChainImages.clear();
+		}*/
+
 		if (m_useVulkanValidationLayers)
 		{
 			DestroyDebugUtilsMessengerEXT(m_vulkanInstance, m_vulkanDebugMessenger, nullptr);
@@ -645,6 +693,7 @@ private:
 	std::vector<VkImage> m_swapChainImages;
 	VkFormat m_swapChainImageFormat;
 	VkExtent2D m_swapChainExtent;
+	std::vector<VkImageView> m_swapChainImageViews;
 };
 
 
