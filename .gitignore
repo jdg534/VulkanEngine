@@ -10,3 +10,5 @@ CTestTestfile.cmake
 
 
 DEV_ENV/
+
+*.spv
