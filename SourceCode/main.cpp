@@ -1,5 +1,6 @@
 #include <optional>
 #include <iostream>
+#include <fstream>
 #include <string> // needed for checking validation layers
 #include <algorithm>
 #include <vector>
@@ -41,6 +42,8 @@ public:
 		, m_surfaceToDrawTo(nullptr)
 		, m_presentQueue(nullptr)
 		, m_swapChain(nullptr)
+		, m_vertexShaderModule(nullptr)
+		, m_fragmentShaderModule(nullptr)
 #if (NDEBUG)
 		, m_useVulkanValidationLayers(false) // release build
 #else
@@ -112,6 +115,7 @@ private:
 		CreateLogicalVulkanDevice();
 		CreateSwapChain();
 		CreateImageViews();
+		CreateGraphicsPipeline();
 	}
 
 	bool AreVulkanValidationLayersSupported()
@@ -585,7 +589,43 @@ private:
 			}
 		}
 	}
+
+	void CreateGraphicsPipeline()
+	{
+		const std::vector<char> vertexShaderCode = ReadShader("Shaders/DefaultVert.spv");
+		const std::vector<char> fragmentShaderCode = ReadShader("Shaders/DefaultFrag.spv");
+		m_vertexShaderModule = CreateShaderModule(vertexShaderCode);
+		m_fragmentShaderModule = CreateShaderModule(fragmentShaderCode);
+	}
+
+	static std::vector<char> ReadShader(const std::string& shaderFilePath)
+	{
+		std::ifstream shaderFile(shaderFilePath, std::ios::binary | std::ios::ate); // opens file in binary mode at end of file
+		if (!shaderFile.is_open())
+		{
+			throw std::runtime_error("Failed to open " + shaderFilePath);
+		}
+		const size_t shaderFileSize = shaderFile.tellg();
+		shaderFile.seekg(0);
+		std::vector<char> shaderCode(shaderFileSize);
+		shaderFile.read(shaderCode.data(), shaderFileSize);
+		shaderFile.close();
+		return shaderCode;
+	}
 	
+	VkShaderModule CreateShaderModule(const std::vector<char>& shaderCode)
+	{
+		VkShaderModuleCreateInfo moduleCreateInfo = {};
+		moduleCreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+		moduleCreateInfo.codeSize = shaderCode.size();
+		moduleCreateInfo.pCode = reinterpret_cast<const uint32_t*>(shaderCode.data());
+		VkShaderModule resultingModule = nullptr;
+		if (vkCreateShaderModule(m_vulkanLogicalDevice, &moduleCreateInfo, nullptr, &resultingModule) != VK_SUCCESS)
+		{
+			throw std::runtime_error("Failed to create shader module");
+		}
+		return resultingModule;
+	}
 
 	void MainLoop()
 	{
@@ -614,6 +654,15 @@ private:
 			}
 			m_swapChainImages.clear();
 		}*/
+
+		if (m_vertexShaderModule)
+		{
+			vkDestroyShaderModule(m_vulkanLogicalDevice, m_vertexShaderModule, nullptr);
+		}
+		if (m_fragmentShaderModule)
+		{
+			vkDestroyShaderModule(m_vulkanLogicalDevice, m_fragmentShaderModule, nullptr);
+		}
 
 		if (m_useVulkanValidationLayers)
 		{
@@ -694,6 +743,9 @@ private:
 	VkFormat m_swapChainImageFormat;
 	VkExtent2D m_swapChainExtent;
 	std::vector<VkImageView> m_swapChainImageViews;
+
+	VkShaderModule m_vertexShaderModule;
+	VkShaderModule m_fragmentShaderModule;
 };
 
 
