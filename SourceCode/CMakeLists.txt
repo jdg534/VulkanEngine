@@ -16,6 +16,6 @@ target_link_libraries(VulkanEngineExe glfw)
 # Copy all SPIR-V shaders to the output directory
 file(GLOB ShaderFiles ../Shaders/*.spv)
 foreach(ShaderFile ${ShaderFiles})
-	file(COPY ${ShaderFile} DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/../Shaders)
-	message("Copying ${ShaderFile} to ${CMAKE_CURRENT_BINARY_DIR}/../Shaders")
+	file(COPY ${ShaderFile} DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/Shaders)
+	message("Copying ${ShaderFile} to ${CMAKE_CURRENT_BINARY_DIR}/Shaders")
 endforeach()
