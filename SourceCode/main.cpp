@@ -44,6 +44,7 @@ public:
 		, m_swapChain(nullptr)
 		, m_vertexShaderModule(nullptr)
 		, m_fragmentShaderModule(nullptr)
+		, m_pipelineLayout(nullptr)
 #if (NDEBUG)
 		, m_useVulkanValidationLayers(false) // release build
 #else
@@ -596,6 +597,118 @@ private:
 		const std::vector<char> fragmentShaderCode = ReadShader("Shaders/DefaultFrag.spv");
 		m_vertexShaderModule = CreateShaderModule(vertexShaderCode);
 		m_fragmentShaderModule = CreateShaderModule(fragmentShaderCode);
+
+		VkPipelineShaderStageCreateInfo vertexShaderStageCreateInfo = {};
+		vertexShaderStageCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+		vertexShaderStageCreateInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
+		vertexShaderStageCreateInfo.module = m_vertexShaderModule;
+		vertexShaderStageCreateInfo.pName = "main";
+
+		VkPipelineShaderStageCreateInfo fragmentShaderStageCreateInfo = {};
+		fragmentShaderStageCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+		fragmentShaderStageCreateInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+		fragmentShaderStageCreateInfo.module = m_fragmentShaderModule;
+		fragmentShaderStageCreateInfo.pName = "main";
+
+		VkPipelineShaderStageCreateInfo piplineStagesCreateInfo[] = { vertexShaderStageCreateInfo, fragmentShaderStageCreateInfo };
+
+		VkPipelineVertexInputStateCreateInfo vertexInputStateCreateInfo = {};
+		vertexInputStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+		vertexInputStateCreateInfo.vertexBindingDescriptionCount = 0;
+		vertexInputStateCreateInfo.pVertexBindingDescriptions = nullptr;
+		vertexInputStateCreateInfo.vertexAttributeDescriptionCount = 0;
+		vertexInputStateCreateInfo.pVertexAttributeDescriptions = nullptr;
+
+		VkPipelineInputAssemblyStateCreateInfo inputAssemblyStateCreateInfo = {};
+		inputAssemblyStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+		inputAssemblyStateCreateInfo.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+		inputAssemblyStateCreateInfo.primitiveRestartEnable = VK_FALSE;
+		
+		VkViewport viewport = {};
+		viewport.x = 0.0f;
+		viewport.y = 0.0f;
+		viewport.width = static_cast<float>(m_swapChainExtent.width);
+		viewport.height = static_cast<float>(m_swapChainExtent.height);
+		viewport.minDepth = 0.0f;
+		viewport.maxDepth = 1.0f;
+
+		VkRect2D scissorRect = {};
+		scissorRect.offset = {0, 0};
+		scissorRect.extent = m_swapChainExtent;
+
+		VkPipelineViewportStateCreateInfo viewportStateCreateInfo = {};
+		viewportStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+		viewportStateCreateInfo.viewportCount = 1;
+		viewportStateCreateInfo.pViewports = &viewport;
+		viewportStateCreateInfo.scissorCount = 1;
+		viewportStateCreateInfo.pScissors = &scissorRect;
+
+		VkPipelineRasterizationStateCreateInfo rasterisationStateCreateInfo = {};
+		rasterisationStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+		rasterisationStateCreateInfo.depthClampEnable = VK_FALSE;
+		rasterisationStateCreateInfo.rasterizerDiscardEnable = VK_FALSE; // VK_TRUE results on dropping the results before presenting to frame buffer
+		rasterisationStateCreateInfo.polygonMode = VK_POLYGON_MODE_FILL; // as opposed to lines or points
+		rasterisationStateCreateInfo.lineWidth = 1.0f;
+		rasterisationStateCreateInfo.cullMode = VK_CULL_MODE_BACK_BIT;
+		rasterisationStateCreateInfo.frontFace = VK_FRONT_FACE_CLOCKWISE;
+		rasterisationStateCreateInfo.depthBiasEnable = VK_FALSE;
+		rasterisationStateCreateInfo.depthBiasConstantFactor = rasterisationStateCreateInfo.depthBiasClamp = rasterisationStateCreateInfo.depthBiasSlopeFactor = 0.0f;
+
+		VkPipelineMultisampleStateCreateInfo multisampleStateCreateInfo = {};
+		multisampleStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+		multisampleStateCreateInfo.sampleShadingEnable = VK_FALSE;
+		multisampleStateCreateInfo.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+		multisampleStateCreateInfo.minSampleShading = 1.0f;
+		multisampleStateCreateInfo.pSampleMask = nullptr;
+		multisampleStateCreateInfo.alphaToCoverageEnable = VK_FALSE;
+		multisampleStateCreateInfo.alphaToOneEnable = VK_FALSE;
+
+		// add depth buffer state here once got to depth buffering stage of the tutorial
+
+		VkPipelineColorBlendAttachmentState colourBlendAttachmentState = {}; // should be named disabled colour blend attachment state
+		colourBlendAttachmentState.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+		colourBlendAttachmentState.blendEnable = VK_FALSE;
+		colourBlendAttachmentState.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
+		colourBlendAttachmentState.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO;
+		colourBlendAttachmentState.colorBlendOp = VK_BLEND_OP_ADD;
+		colourBlendAttachmentState.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+		colourBlendAttachmentState.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+		colourBlendAttachmentState.alphaBlendOp = VK_BLEND_OP_ADD;
+
+		VkPipelineColorBlendStateCreateInfo colourBlendattachmentStateCreateInfo = {};
+		colourBlendattachmentStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+		colourBlendattachmentStateCreateInfo.logicOpEnable = VK_FALSE;
+		colourBlendattachmentStateCreateInfo.logicOp = VK_LOGIC_OP_COPY; // Optional
+		colourBlendattachmentStateCreateInfo.attachmentCount = 1;
+		colourBlendattachmentStateCreateInfo.pAttachments = &colourBlendAttachmentState;
+		// defaults to black no alpha
+		colourBlendattachmentStateCreateInfo.blendConstants[0] = 0.0f; // Optional
+		colourBlendattachmentStateCreateInfo.blendConstants[1] = 0.0f; // Optional
+		colourBlendattachmentStateCreateInfo.blendConstants[2] = 0.0f; // Optional
+		colourBlendattachmentStateCreateInfo.blendConstants[3] = 0.0f; // Optional
+
+		VkDynamicState pipelineDynamicStates[] =
+		{
+			VK_DYNAMIC_STATE_VIEWPORT,
+			VK_DYNAMIC_STATE_LINE_WIDTH
+		};
+
+		VkPipelineDynamicStateCreateInfo pipelineDynamicStatesCreateInfo = {};
+		pipelineDynamicStatesCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+		pipelineDynamicStatesCreateInfo.dynamicStateCount = 2;
+		pipelineDynamicStatesCreateInfo.pDynamicStates = pipelineDynamicStates;
+
+		VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo = {};
+		pipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+		pipelineLayoutCreateInfo.setLayoutCount = 0; // Optional
+		pipelineLayoutCreateInfo.pSetLayouts = nullptr; // Optional
+		pipelineLayoutCreateInfo.pushConstantRangeCount = 0; // Optional
+		pipelineLayoutCreateInfo.pPushConstantRanges = nullptr; // Optional
+
+		if (vkCreatePipelineLayout(m_vulkanLogicalDevice, &pipelineLayoutCreateInfo, nullptr, &m_pipelineLayout) != VK_SUCCESS)
+		{
+			throw std::runtime_error("failed to create pipeline layout!");
+		}
 	}
 
 	static std::vector<char> ReadShader(const std::string& shaderFilePath)
@@ -654,6 +767,11 @@ private:
 			}
 			m_swapChainImages.clear();
 		}*/
+
+		if (m_pipelineLayout)
+		{
+			vkDestroyPipelineLayout(m_vulkanLogicalDevice, m_pipelineLayout, nullptr);
+		}
 
 		if (m_vertexShaderModule)
 		{
@@ -746,6 +864,8 @@ private:
 
 	VkShaderModule m_vertexShaderModule;
 	VkShaderModule m_fragmentShaderModule;
+
+	VkPipelineLayout m_pipelineLayout;
 };
 
 
