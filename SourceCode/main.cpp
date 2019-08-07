@@ -120,6 +120,7 @@ private:
 		CreateImageViews();
 		CreateRenderPass();
 		CreateGraphicsPipeline();
+		CreateFrameBuffers();
 	}
 
 	bool AreVulkanValidationLayersSupported()
@@ -799,6 +800,30 @@ private:
 		return resultingModule;
 	}
 
+	void CreateFrameBuffers()
+	{
+		const size_t nImagesInSwapChainViews = m_swapChainImageViews.size();
+		assert(nImagesInSwapChainViews > 0);
+
+		m_swapChainFrameBuffers.resize(nImagesInSwapChainViews);
+		for (size_t i = 0; i < nImagesInSwapChainViews; ++i)
+		{
+			VkFramebufferCreateInfo framebufferCreateInfo = {};
+			framebufferCreateInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+			framebufferCreateInfo.renderPass = m_renderPass;
+			framebufferCreateInfo.attachmentCount = 1;
+			framebufferCreateInfo.pAttachments = &m_swapChainImageViews[i];
+			framebufferCreateInfo.width = m_swapChainExtent.width;
+			framebufferCreateInfo.height = m_swapChainExtent.height;
+			framebufferCreateInfo.layers = 1;
+
+			if (vkCreateFramebuffer(m_vulkanLogicalDevice, &framebufferCreateInfo, nullptr, &m_swapChainFrameBuffers[i]) != VK_SUCCESS)
+			{
+				throw std::runtime_error("Failed to create frame buffer");
+			}
+		}
+	}
+
 	void MainLoop()
 	{
 		while (!glfwWindowShouldClose(m_window))
@@ -809,6 +834,13 @@ private:
 
 	void Shutdown()
 	{
+		if (m_swapChainFrameBuffers.size() > 0)
+		{
+			for (const VkFramebuffer& fb : m_swapChainFrameBuffers)
+			{
+				vkDestroyFramebuffer(m_vulkanLogicalDevice, fb, nullptr);
+			}
+		}
 		if (m_swapChainImageViews.size() > 0)
 		{
 			for (const VkImageView& imgView : m_swapChainImageViews)
@@ -933,6 +965,7 @@ private:
 	VkPipeline m_pipeline;
 	VkPipelineLayout m_pipelineLayout;
 	VkRenderPass m_renderPass;
+	std::vector<VkFramebuffer> m_swapChainFrameBuffers;
 };
 
 
