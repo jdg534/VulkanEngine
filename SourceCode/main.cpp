@@ -45,6 +45,7 @@ public:
 		, m_vertexShaderModule(nullptr)
 		, m_fragmentShaderModule(nullptr)
 		, m_pipelineLayout(nullptr)
+		, m_renderPass(nullptr)
 #if (NDEBUG)
 		, m_useVulkanValidationLayers(false) // release build
 #else
@@ -116,6 +117,7 @@ private:
 		CreateLogicalVulkanDevice();
 		CreateSwapChain();
 		CreateImageViews();
+		CreateRenderPass();
 		CreateGraphicsPipeline();
 	}
 
@@ -711,6 +713,41 @@ private:
 		}
 	}
 
+	void CreateRenderPass()
+	{
+		VkAttachmentDescription colourAttachment = {};
+		colourAttachment.format = m_swapChainImageFormat;
+		colourAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+		colourAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+		colourAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+		colourAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+		colourAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+		colourAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		colourAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+
+		VkAttachmentReference colourAttachmentRef = {};
+		colourAttachmentRef.attachment = 0;
+		colourAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+		VkSubpassDescription subpass = {};
+		subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+		subpass.colorAttachmentCount = 1;
+		subpass.pColorAttachments = &colourAttachmentRef;
+
+		// VkRenderPass m_renderPass;
+		VkRenderPassCreateInfo renderPassCreateInfo = {};
+		renderPassCreateInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+		renderPassCreateInfo.attachmentCount = 1;
+		renderPassCreateInfo.pAttachments = &colourAttachment;
+		renderPassCreateInfo.subpassCount = 1;
+		renderPassCreateInfo.pSubpasses = &subpass;
+
+		if (vkCreateRenderPass(m_vulkanLogicalDevice, &renderPassCreateInfo, nullptr, &m_renderPass) != VK_SUCCESS)
+		{
+			throw std::runtime_error("Failed to create the render pass");
+		}
+	}
+
 	static std::vector<char> ReadShader(const std::string& shaderFilePath)
 	{
 		std::ifstream shaderFile(shaderFilePath, std::ios::binary | std::ios::ate); // opens file in binary mode at end of file
@@ -767,12 +804,14 @@ private:
 			}
 			m_swapChainImages.clear();
 		}*/
-
 		if (m_pipelineLayout)
 		{
 			vkDestroyPipelineLayout(m_vulkanLogicalDevice, m_pipelineLayout, nullptr);
 		}
-
+		if (m_renderPass)
+		{
+			vkDestroyRenderPass(m_vulkanLogicalDevice, m_renderPass, nullptr);
+		}
 		if (m_vertexShaderModule)
 		{
 			vkDestroyShaderModule(m_vulkanLogicalDevice, m_vertexShaderModule, nullptr);
@@ -855,7 +894,7 @@ private:
 	VkSurfaceKHR m_surfaceToDrawTo;
 	VkQueue m_presentQueue;
 	
-	// swap chain variables, note need the enable to extentions
+	// swap chain variables, note need the enable to extensions
 	VkSwapchainKHR m_swapChain;
 	std::vector<VkImage> m_swapChainImages;
 	VkFormat m_swapChainImageFormat;
@@ -866,6 +905,7 @@ private:
 	VkShaderModule m_fragmentShaderModule;
 
 	VkPipelineLayout m_pipelineLayout;
+	VkRenderPass m_renderPass;
 };
 
 
