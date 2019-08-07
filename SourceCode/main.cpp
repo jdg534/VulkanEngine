@@ -44,6 +44,7 @@ public:
 		, m_swapChain(nullptr)
 		, m_vertexShaderModule(nullptr)
 		, m_fragmentShaderModule(nullptr)
+		, m_pipeline(nullptr)
 		, m_pipelineLayout(nullptr)
 		, m_renderPass(nullptr)
 #if (NDEBUG)
@@ -677,17 +678,17 @@ private:
 		colourBlendAttachmentState.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
 		colourBlendAttachmentState.alphaBlendOp = VK_BLEND_OP_ADD;
 
-		VkPipelineColorBlendStateCreateInfo colourBlendattachmentStateCreateInfo = {};
-		colourBlendattachmentStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-		colourBlendattachmentStateCreateInfo.logicOpEnable = VK_FALSE;
-		colourBlendattachmentStateCreateInfo.logicOp = VK_LOGIC_OP_COPY; // Optional
-		colourBlendattachmentStateCreateInfo.attachmentCount = 1;
-		colourBlendattachmentStateCreateInfo.pAttachments = &colourBlendAttachmentState;
+		VkPipelineColorBlendStateCreateInfo colourBlendStateCreateInfo = {};
+		colourBlendStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+		colourBlendStateCreateInfo.logicOpEnable = VK_FALSE;
+		colourBlendStateCreateInfo.logicOp = VK_LOGIC_OP_COPY; // Optional
+		colourBlendStateCreateInfo.attachmentCount = 1;
+		colourBlendStateCreateInfo.pAttachments = &colourBlendAttachmentState;
 		// defaults to black no alpha
-		colourBlendattachmentStateCreateInfo.blendConstants[0] = 0.0f; // Optional
-		colourBlendattachmentStateCreateInfo.blendConstants[1] = 0.0f; // Optional
-		colourBlendattachmentStateCreateInfo.blendConstants[2] = 0.0f; // Optional
-		colourBlendattachmentStateCreateInfo.blendConstants[3] = 0.0f; // Optional
+		colourBlendStateCreateInfo.blendConstants[0] = 0.0f; // Optional
+		colourBlendStateCreateInfo.blendConstants[1] = 0.0f; // Optional
+		colourBlendStateCreateInfo.blendConstants[2] = 0.0f; // Optional
+		colourBlendStateCreateInfo.blendConstants[3] = 0.0f; // Optional
 
 		VkDynamicState pipelineDynamicStates[] =
 		{
@@ -710,6 +711,27 @@ private:
 		if (vkCreatePipelineLayout(m_vulkanLogicalDevice, &pipelineLayoutCreateInfo, nullptr, &m_pipelineLayout) != VK_SUCCESS)
 		{
 			throw std::runtime_error("failed to create pipeline layout!");
+		}
+
+		VkGraphicsPipelineCreateInfo pipelineCreateInfo = {};
+		pipelineCreateInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+		pipelineCreateInfo.stageCount = 2;
+		pipelineCreateInfo.pStages = piplineStagesCreateInfo;
+		pipelineCreateInfo.pVertexInputState = &vertexInputStateCreateInfo;
+		pipelineCreateInfo.pInputAssemblyState = &inputAssemblyStateCreateInfo;
+		pipelineCreateInfo.pViewportState = &viewportStateCreateInfo;
+		pipelineCreateInfo.pRasterizationState = &rasterisationStateCreateInfo;
+		pipelineCreateInfo.pMultisampleState = &multisampleStateCreateInfo;
+		pipelineCreateInfo.pColorBlendState = &colourBlendStateCreateInfo;
+		pipelineCreateInfo.layout = m_pipelineLayout;
+		pipelineCreateInfo.renderPass = m_renderPass;
+		pipelineCreateInfo.subpass = 0;
+		pipelineCreateInfo.basePipelineHandle = VK_NULL_HANDLE;
+		pipelineCreateInfo.basePipelineIndex = -1;
+
+		if (vkCreateGraphicsPipelines(m_vulkanLogicalDevice, VK_NULL_HANDLE, 1, &pipelineCreateInfo, nullptr, &m_pipeline) != VK_SUCCESS)
+		{
+			throw std::runtime_error("Failed to create graphics pipeline.");
 		}
 	}
 
@@ -804,6 +826,10 @@ private:
 			}
 			m_swapChainImages.clear();
 		}*/
+		if (m_pipeline)
+		{
+			vkDestroyPipeline(m_vulkanLogicalDevice, m_pipeline, nullptr);
+		}
 		if (m_pipelineLayout)
 		{
 			vkDestroyPipelineLayout(m_vulkanLogicalDevice, m_pipelineLayout, nullptr);
@@ -904,6 +930,7 @@ private:
 	VkShaderModule m_vertexShaderModule;
 	VkShaderModule m_fragmentShaderModule;
 
+	VkPipeline m_pipeline;
 	VkPipelineLayout m_pipelineLayout;
 	VkRenderPass m_renderPass;
 };
