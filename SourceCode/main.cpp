@@ -47,6 +47,7 @@ public:
 		, m_pipeline(nullptr)
 		, m_pipelineLayout(nullptr)
 		, m_renderPass(nullptr)
+		, m_commandPool(nullptr)
 #if (NDEBUG)
 		, m_useVulkanValidationLayers(false) // release build
 #else
@@ -121,6 +122,8 @@ private:
 		CreateRenderPass();
 		CreateGraphicsPipeline();
 		CreateFrameBuffers();
+		CreateCommandPool();
+		CreateCommandBuffers();
 	}
 
 	bool AreVulkanValidationLayersSupported()
@@ -824,6 +827,72 @@ private:
 		}
 	}
 
+	void CreateCommandPool()
+	{
+		QueueFamilyIndices queueFamilyIndices = FindQueueFamilies(m_vulkanPhysicalDevice);
+		VkCommandPoolCreateInfo cmdPoolCreateInfo = {};
+		cmdPoolCreateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+		cmdPoolCreateInfo.queueFamilyIndex = queueFamilyIndices.m_graphicsFamilyIndex.value();
+		cmdPoolCreateInfo.flags = 0;
+
+		if (vkCreateCommandPool(m_vulkanLogicalDevice, &cmdPoolCreateInfo, nullptr, &m_commandPool))
+		{
+			throw std::runtime_error("Failed to create command queue");
+		}
+	}
+
+	void CreateCommandBuffers()
+	{
+		const size_t nFrameBuffers = m_swapChainFrameBuffers.size();
+		m_commandBuffers.resize(nFrameBuffers);
+		VkCommandBufferAllocateInfo cmdBuffersAllocInfo = {};
+		cmdBuffersAllocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+		cmdBuffersAllocInfo.commandPool = m_commandPool;
+		cmdBuffersAllocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+		cmdBuffersAllocInfo.commandBufferCount = static_cast<uint32_t>(nFrameBuffers);
+
+		if (vkAllocateCommandBuffers(m_vulkanLogicalDevice, &cmdBuffersAllocInfo, m_commandBuffers.data()))
+		{
+			throw std::runtime_error("Failed to allocate Vulkan Command buffers");
+		}
+
+
+		// check if this is in the correct place.... sound like something that should be in a Draw() function
+		for (size_t i = 0; i < nFrameBuffers; ++i)
+		{
+			VkCommandBufferBeginInfo cmdBuffBeginInfo = {};
+			cmdBuffBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+			cmdBuffBeginInfo.flags = 0;
+			cmdBuffBeginInfo.pInheritanceInfo = nullptr;
+
+			if (vkBeginCommandBuffer(m_commandBuffers[i], &cmdBuffBeginInfo) != VK_SUCCESS)
+			{
+				throw std::runtime_error("Failed the start recording a command buffer!");
+			}
+
+			
+			VkRenderPassBeginInfo renderPassBeginInfo = {};
+			renderPassBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+			renderPassBeginInfo.framebuffer = m_swapChainFrameBuffers[i];
+			renderPassBeginInfo.renderPass = m_renderPass;
+			renderPassBeginInfo.renderArea.offset = { 0, 0 };
+			renderPassBeginInfo.renderArea.extent = m_swapChainExtent;
+			VkClearValue clearColour = { 0.0f, 0.0f, 0.0f, 1.0f}; // RGBA?
+			renderPassBeginInfo.pClearValues = &clearColour;
+			renderPassBeginInfo.clearValueCount = 1;
+			vkCmdBeginRenderPass(m_commandBuffers[i], &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+			// start draw commands
+			vkCmdBindPipeline(m_commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipeline);
+			vkCmdDraw(m_commandBuffers[i], 3, 1, 0, 0);
+			// end draw commands
+			vkCmdEndRenderPass(m_commandBuffers[i]);
+			if (vkEndCommandBuffer(m_commandBuffers[i]) != VK_SUCCESS)
+			{
+				throw std::runtime_error("Failed to finish recording commands to buffer");
+			}
+		}
+	}
+
 	void MainLoop()
 	{
 		while (!glfwWindowShouldClose(m_window))
@@ -834,6 +903,19 @@ private:
 
 	void Shutdown()
 	{
+		if (m_commandBuffers.size() > 0)
+		{
+			for (VkCommandBuffer& cmdBuffer : m_commandBuffers)
+			{
+				// vkDestroyCommandBuff?
+				// tutorial says they don't need clean up, check when refactoring
+			}
+		}
+		if (m_commandPool)
+		{
+			vkDestroyCommandPool(m_vulkanLogicalDevice, m_commandPool, nullptr);
+		}
+
 		if (m_swapChainFrameBuffers.size() > 0)
 		{
 			for (const VkFramebuffer& fb : m_swapChainFrameBuffers)
@@ -966,6 +1048,10 @@ private:
 	VkPipelineLayout m_pipelineLayout;
 	VkRenderPass m_renderPass;
 	std::vector<VkFramebuffer> m_swapChainFrameBuffers;
+
+	// use these to "send drawing commands"
+	VkCommandPool m_commandPool;
+	std::vector<VkCommandBuffer> m_commandBuffers;
 };
 
 
