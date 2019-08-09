@@ -50,6 +50,7 @@ public:
 		, m_commandPool(nullptr)
 		, m_imageReadyToDrawToSemaphore(nullptr)
 		, m_finishedDrawingSemaphore(nullptr)
+		, m_getImageTimeOutNanoSeconds(0)
 #if (NDEBUG)
 		, m_useVulkanValidationLayers(false) // release build
 #else
@@ -102,6 +103,7 @@ private:
 #endif
 
 		}
+		m_getImageTimeOutNanoSeconds = static_cast<uint64_t>(std::powl(2, 64));
 	}
 	void InitWindow()
 	{
@@ -776,6 +778,7 @@ private:
 		renderPassDependency.dstSubpass = 0;
 		renderPassDependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 		renderPassDependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+		renderPassDependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 
 		renderPassCreateInfo.dependencyCount = 1;
 		renderPassCreateInfo.pDependencies = &renderPassDependency;
@@ -935,8 +938,7 @@ private:
 	{
 		// get next image index from swap chain
 		uint32_t imageIndex = 0;
-		constexpr uint64_t c_getImageTimeOutNanoSeconds = 2 ^ 64;
-		vkAcquireNextImageKHR(m_vulkanLogicalDevice, m_swapChain, c_getImageTimeOutNanoSeconds, m_imageReadyToDrawToSemaphore, VK_NULL_HANDLE, &imageIndex);
+		vkAcquireNextImageKHR(m_vulkanLogicalDevice, m_swapChain, m_getImageTimeOutNanoSeconds, m_imageReadyToDrawToSemaphore, VK_NULL_HANDLE, &imageIndex);
 
 		// submit the command buffer for the frame
 		VkSubmitInfo submitInfo = {};
@@ -1132,6 +1134,8 @@ private:
 
 	VkSemaphore m_imageReadyToDrawToSemaphore;
 	VkSemaphore m_finishedDrawingSemaphore;
+
+	uint64_t m_getImageTimeOutNanoSeconds;
 };
 
 
