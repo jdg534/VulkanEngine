@@ -48,6 +48,8 @@ public:
 		, m_pipelineLayout(nullptr)
 		, m_renderPass(nullptr)
 		, m_commandPool(nullptr)
+		, m_imageReadyToDrawToSemaphore(nullptr)
+		, m_finishedDrawingSemaphore(nullptr)
 #if (NDEBUG)
 		, m_useVulkanValidationLayers(false) // release build
 #else
@@ -124,6 +126,7 @@ private:
 		CreateFrameBuffers();
 		CreateCommandPool();
 		CreateCommandBuffers();
+		CreateSemaphores();
 	}
 
 	bool AreVulkanValidationLayersSupported()
@@ -893,6 +896,16 @@ private:
 		}
 	}
 
+	void CreateSemaphores()
+	{
+		VkSemaphoreCreateInfo semaphoneCreateInfo = {};
+		semaphoneCreateInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+		if (vkCreateSemaphore(m_vulkanLogicalDevice, &semaphoneCreateInfo, nullptr, &m_imageReadyToDrawToSemaphore) != VK_SUCCESS || vkCreateSemaphore(m_vulkanLogicalDevice, &semaphoneCreateInfo, nullptr, &m_finishedDrawingSemaphore) != VK_SUCCESS)
+		{
+			throw std::runtime_error("Failed to CreateSemaphores.");
+		}
+	}
+
 	void MainLoop()
 	{
 		while (!glfwWindowShouldClose(m_window))
@@ -903,6 +916,11 @@ private:
 
 	void Shutdown()
 	{
+		if (m_imageReadyToDrawToSemaphore || m_finishedDrawingSemaphore)
+		{
+			vkDestroySemaphore(m_vulkanLogicalDevice, m_imageReadyToDrawToSemaphore, nullptr);
+			vkDestroySemaphore(m_vulkanLogicalDevice, m_finishedDrawingSemaphore, nullptr);
+		}
 		if (m_commandBuffers.size() > 0)
 		{
 			for (VkCommandBuffer& cmdBuffer : m_commandBuffers)
@@ -1052,6 +1070,9 @@ private:
 	// use these to "send drawing commands"
 	VkCommandPool m_commandPool;
 	std::vector<VkCommandBuffer> m_commandBuffers;
+
+	VkSemaphore m_imageReadyToDrawToSemaphore;
+	VkSemaphore m_finishedDrawingSemaphore;
 };
 
 
