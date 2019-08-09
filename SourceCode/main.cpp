@@ -771,6 +771,15 @@ private:
 		renderPassCreateInfo.subpassCount = 1;
 		renderPassCreateInfo.pSubpasses = &subpass;
 
+		VkSubpassDependency renderPassDependency = {};
+		renderPassDependency.srcSubpass = VK_SUBPASS_EXTERNAL;
+		renderPassDependency.dstSubpass = 0;
+		renderPassDependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+		renderPassDependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+
+		renderPassCreateInfo.dependencyCount = 1;
+		renderPassCreateInfo.pDependencies = &renderPassDependency;
+
 		if (vkCreateRenderPass(m_vulkanLogicalDevice, &renderPassCreateInfo, nullptr, &m_renderPass) != VK_SUCCESS)
 		{
 			throw std::runtime_error("Failed to create the render pass");
@@ -911,7 +920,57 @@ private:
 		while (!glfwWindowShouldClose(m_window))
 		{
 			glfwPollEvents();
+			// Update() float delta time here
+			Draw();
 		}
+		vkDeviceWaitIdle(m_vulkanLogicalDevice);
+	}
+
+	void Update(const float deltaSeconds)
+	{
+		// TODO add logic for updating scene objects here
+	}
+
+	void Draw()
+	{
+		// get next image index from swap chain
+		uint32_t imageIndex = 0;
+		constexpr uint64_t c_getImageTimeOutNanoSeconds = 2 ^ 64;
+		vkAcquireNextImageKHR(m_vulkanLogicalDevice, m_swapChain, c_getImageTimeOutNanoSeconds, m_imageReadyToDrawToSemaphore, VK_NULL_HANDLE, &imageIndex);
+
+		// submit the command buffer for the frame
+		VkSubmitInfo submitInfo = {};
+		submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+
+		VkPipelineStageFlags WaitStagesArray[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
+		submitInfo.waitSemaphoreCount = 1;
+		submitInfo.pWaitDstStageMask = WaitStagesArray;
+		submitInfo.pWaitSemaphores = &m_imageReadyToDrawToSemaphore;
+		submitInfo.commandBufferCount = 1;
+		submitInfo.pCommandBuffers = &m_commandBuffers[imageIndex];
+		submitInfo.commandBufferCount = 1;
+		submitInfo.signalSemaphoreCount = 1;
+		submitInfo.pSignalSemaphores = &m_finishedDrawingSemaphore;
+
+		if (vkQueueSubmit(m_graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE) != VK_SUCCESS)
+		{
+			throw std::runtime_error("Failed to submit draw command buffer.");
+		}
+
+		// present the image final image
+		VkPresentInfoKHR presentInfo = {};
+		presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+		presentInfo.waitSemaphoreCount = 1;
+		presentInfo.pWaitSemaphores = &m_finishedDrawingSemaphore;
+		presentInfo.swapchainCount = 1;
+		presentInfo.pImageIndices = &imageIndex;
+		presentInfo.pResults = nullptr;
+		presentInfo.swapchainCount = 1;
+		presentInfo.pSwapchains = &m_swapChain;
+		vkQueuePresentKHR(m_presentQueue, &presentInfo);
+
+		// wait for drawing to finish
+		vkQueueWaitIdle(m_presentQueue);
 	}
 
 	void Shutdown()
