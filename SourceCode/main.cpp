@@ -48,9 +48,8 @@ public:
 		, m_pipelineLayout(nullptr)
 		, m_renderPass(nullptr)
 		, m_commandPool(nullptr)
-		, m_imageReadyToDrawToSemaphore(nullptr)
-		, m_finishedDrawingSemaphore(nullptr)
 		, m_getImageTimeOutNanoSeconds(0)
+		, m_currentFrameSyncObjectIndex(0)
 #if (NDEBUG)
 		, m_useVulkanValidationLayers(false) // release build
 #else
@@ -128,7 +127,7 @@ private:
 		CreateFrameBuffers();
 		CreateCommandPool();
 		CreateCommandBuffers();
-		CreateSemaphores();
+		CreateVulkanSyncObjects();
 	}
 
 	bool AreVulkanValidationLayersSupported()
@@ -908,13 +907,26 @@ private:
 		}
 	}
 
-	void CreateSemaphores()
+	void CreateVulkanSyncObjects()
 	{
 		VkSemaphoreCreateInfo semaphoneCreateInfo = {};
 		semaphoneCreateInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-		if (vkCreateSemaphore(m_vulkanLogicalDevice, &semaphoneCreateInfo, nullptr, &m_imageReadyToDrawToSemaphore) != VK_SUCCESS || vkCreateSemaphore(m_vulkanLogicalDevice, &semaphoneCreateInfo, nullptr, &m_finishedDrawingSemaphore) != VK_SUCCESS)
+
+		VkFenceCreateInfo fenceCreateInfo = {};
+		fenceCreateInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+		fenceCreateInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+
+		m_imageAvailableSemaphones.resize(S_MAX_FRAMES_TO_PROCESS_AT_ONCE);
+		m_renderFinishedSemaphores.resize(S_MAX_FRAMES_TO_PROCESS_AT_ONCE);
+		m_activeFrameInProcessFences.resize(S_MAX_FRAMES_TO_PROCESS_AT_ONCE);
+		for (size_t i = 0; i < S_MAX_FRAMES_TO_PROCESS_AT_ONCE; ++i)
 		{
-			throw std::runtime_error("Failed to CreateSemaphores.");
+			if (vkCreateSemaphore(m_vulkanLogicalDevice, &semaphoneCreateInfo, nullptr, &m_imageAvailableSemaphones[i]) != VK_SUCCESS 
+				|| vkCreateSemaphore(m_vulkanLogicalDevice, &semaphoneCreateInfo, nullptr, &m_renderFinishedSemaphores[i]) != VK_SUCCESS 
+				|| vkCreateFence(m_vulkanLogicalDevice, &fenceCreateInfo, nullptr, &m_activeFrameInProcessFences[i]) != VK_SUCCESS)
+			{
+				throw std::runtime_error("Failed to Create vulkan sync objects.");
+			}
 		}
 	}
 
@@ -936,9 +948,13 @@ private:
 
 	void Draw()
 	{
+		// wait for fence
+		vkWaitForFences(m_vulkanLogicalDevice, 1, &m_activeFrameInProcessFences[m_currentFrameSyncObjectIndex], VK_TRUE, m_getImageTimeOutNanoSeconds);
+		vkResetFences(m_vulkanLogicalDevice, 1, &m_activeFrameInProcessFences[m_currentFrameSyncObjectIndex]);
+
 		// get next image index from swap chain
-		uint32_t imageIndex = 0;
-		vkAcquireNextImageKHR(m_vulkanLogicalDevice, m_swapChain, m_getImageTimeOutNanoSeconds, m_imageReadyToDrawToSemaphore, VK_NULL_HANDLE, &imageIndex);
+		uint32_t imageIndex = 0; // not to be confused with m_currentFrameSemaphoreIndex
+		vkAcquireNextImageKHR(m_vulkanLogicalDevice, m_swapChain, m_getImageTimeOutNanoSeconds, m_imageAvailableSemaphones[m_currentFrameSyncObjectIndex], VK_NULL_HANDLE, &imageIndex);
 
 		// submit the command buffer for the frame
 		VkSubmitInfo submitInfo = {};
@@ -947,14 +963,14 @@ private:
 		VkPipelineStageFlags WaitStagesArray[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
 		submitInfo.waitSemaphoreCount = 1;
 		submitInfo.pWaitDstStageMask = WaitStagesArray;
-		submitInfo.pWaitSemaphores = &m_imageReadyToDrawToSemaphore;
+		submitInfo.pWaitSemaphores = &m_imageAvailableSemaphones[m_currentFrameSyncObjectIndex];
 		submitInfo.commandBufferCount = 1;
 		submitInfo.pCommandBuffers = &m_commandBuffers[imageIndex];
 		submitInfo.commandBufferCount = 1;
 		submitInfo.signalSemaphoreCount = 1;
-		submitInfo.pSignalSemaphores = &m_finishedDrawingSemaphore;
+		submitInfo.pSignalSemaphores = &m_renderFinishedSemaphores[m_currentFrameSyncObjectIndex];
 
-		if (vkQueueSubmit(m_graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE) != VK_SUCCESS)
+		if (vkQueueSubmit(m_graphicsQueue, 1, &submitInfo, m_activeFrameInProcessFences[m_currentFrameSyncObjectIndex]) != VK_SUCCESS)
 		{
 			throw std::runtime_error("Failed to submit draw command buffer.");
 		}
@@ -963,7 +979,7 @@ private:
 		VkPresentInfoKHR presentInfo = {};
 		presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
 		presentInfo.waitSemaphoreCount = 1;
-		presentInfo.pWaitSemaphores = &m_finishedDrawingSemaphore;
+		presentInfo.pWaitSemaphores = &m_renderFinishedSemaphores[m_currentFrameSyncObjectIndex];
 		presentInfo.swapchainCount = 1;
 		presentInfo.pImageIndices = &imageIndex;
 		presentInfo.pResults = nullptr;
@@ -971,16 +987,21 @@ private:
 		presentInfo.pSwapchains = &m_swapChain;
 		vkQueuePresentKHR(m_presentQueue, &presentInfo);
 
-		// wait for drawing to finish
-		vkQueueWaitIdle(m_presentQueue);
+		++m_currentFrameSyncObjectIndex;
+		m_currentFrameSyncObjectIndex %= S_MAX_FRAMES_TO_PROCESS_AT_ONCE;
+
 	}
 
 	void Shutdown()
 	{
-		if (m_imageReadyToDrawToSemaphore || m_finishedDrawingSemaphore)
+		if (m_imageAvailableSemaphones.size() > 0 || m_renderFinishedSemaphores.size() > 0 || m_activeFrameInProcessFences.size() > 0)
 		{
-			vkDestroySemaphore(m_vulkanLogicalDevice, m_imageReadyToDrawToSemaphore, nullptr);
-			vkDestroySemaphore(m_vulkanLogicalDevice, m_finishedDrawingSemaphore, nullptr);
+			for (size_t i = 0; i < S_MAX_FRAMES_TO_PROCESS_AT_ONCE; ++i)
+			{
+				vkDestroySemaphore(m_vulkanLogicalDevice, m_imageAvailableSemaphones[i], nullptr);
+				vkDestroySemaphore(m_vulkanLogicalDevice, m_renderFinishedSemaphores[i], nullptr);
+				vkDestroyFence(m_vulkanLogicalDevice, m_activeFrameInProcessFences[i], nullptr);
+			}
 		}
 		if (m_commandBuffers.size() > 0)
 		{
@@ -1132,10 +1153,16 @@ private:
 	VkCommandPool m_commandPool;
 	std::vector<VkCommandBuffer> m_commandBuffers;
 
-	VkSemaphore m_imageReadyToDrawToSemaphore;
-	VkSemaphore m_finishedDrawingSemaphore;
+	// VkSemaphore m_imageReadyToDrawToSemaphore;
+	// VkSemaphore m_finishedDrawingSemaphore;
 
-	uint64_t m_getImageTimeOutNanoSeconds;
+	uint64_t m_getImageTimeOutNanoSeconds; // refactor name
+	static const size_t S_MAX_FRAMES_TO_PROCESS_AT_ONCE = 2;
+	std::vector<VkSemaphore> m_imageAvailableSemaphones;
+	std::vector<VkSemaphore> m_renderFinishedSemaphores;
+	std::vector<VkFence> m_activeFrameInProcessFences;
+
+	size_t m_currentFrameSyncObjectIndex;
 };
 
 
