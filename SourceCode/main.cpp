@@ -2,6 +2,7 @@
 #include <iostream>
 #include <fstream>
 #include <string> // needed for checking validation layers
+#include <array>
 #include <algorithm>
 #include <vector>
 #include <set>
@@ -27,6 +28,35 @@
 
 static const std::vector<const char*> s_validationLayers = { "VK_LAYER_KHRONOS_validation" }; // following tutorial structure, refactor once we're got a triangle on screen
 static const std::vector<const char*> s_requiredPhysicalDeviceExtentions = { VK_KHR_SWAPCHAIN_EXTENSION_NAME }; // these constraints are meant to be used on a created device, not during device creation
+
+struct Vertex
+{
+	glm::vec2 position;
+	glm::vec3 colour;
+
+	static VkVertexInputBindingDescription GetBindingDescription()
+	{
+		VkVertexInputBindingDescription bindingDesc = {};
+		bindingDesc.stride = sizeof(VkVertexInputBindingDescription);
+		bindingDesc.binding = 0;
+		bindingDesc.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+		return bindingDesc;
+	}
+
+	static std::array<VkVertexInputAttributeDescription, 2> GetAttributeDescriptions()
+	{
+		std::array<VkVertexInputAttributeDescription, 2> attribDescs = {};
+		attribDescs[0].binding = 0;
+		attribDescs[0].location = 0;
+		attribDescs[0].format = VK_FORMAT_R32G32_SFLOAT;
+		attribDescs[0].offset = offsetof(Vertex, position);
+		attribDescs[1].binding = 1;
+		attribDescs[1].location = 1;
+		attribDescs[1].format = VK_FORMAT_R32G32B32_SFLOAT;
+		attribDescs[1].offset = offsetof(Vertex, colour);
+		return attribDescs;
+	}
+};
 
 class VulkanApp
 {
@@ -626,10 +656,14 @@ private:
 
 		VkPipelineVertexInputStateCreateInfo vertexInputStateCreateInfo = {};
 		vertexInputStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-		vertexInputStateCreateInfo.vertexBindingDescriptionCount = 0;
-		vertexInputStateCreateInfo.pVertexBindingDescriptions = nullptr;
-		vertexInputStateCreateInfo.vertexAttributeDescriptionCount = 0;
-		vertexInputStateCreateInfo.pVertexAttributeDescriptions = nullptr;
+		
+		VkVertexInputBindingDescription vertBindingDesc = Vertex::GetBindingDescription();
+		std::array< VkVertexInputAttributeDescription, 2> attribDesc = Vertex::GetAttributeDescriptions();
+
+		vertexInputStateCreateInfo.vertexBindingDescriptionCount = 1;
+		vertexInputStateCreateInfo.pVertexBindingDescriptions = &vertBindingDesc;
+		vertexInputStateCreateInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(attribDesc.size());
+		vertexInputStateCreateInfo.pVertexAttributeDescriptions = attribDesc.data();
 
 		VkPipelineInputAssemblyStateCreateInfo inputAssemblyStateCreateInfo = {};
 		inputAssemblyStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
