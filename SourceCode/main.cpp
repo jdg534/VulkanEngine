@@ -32,8 +32,8 @@ class VulkanApp
 {
 public:
 	VulkanApp()
-		: c_windowWidth(800)
-		, c_windowHeight(600)
+		: m_windowWidth(800)
+		, m_windowHeight(600)
 		, m_window(nullptr)
 		, m_vulkanInstance(nullptr)
 		, m_vulkanPhysicalDevice(nullptr)
@@ -50,6 +50,7 @@ public:
 		, m_commandPool(nullptr)
 		, m_getImageTimeOutNanoSeconds(0)
 		, m_currentFrameSyncObjectIndex(0)
+		, m_frameBufferResized(false)
 #if (NDEBUG)
 		, m_useVulkanValidationLayers(false) // release build
 #else
@@ -107,10 +108,10 @@ private:
 	void InitWindow()
 	{
 		glfwInit();
-
 		glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-		glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
-		m_window = glfwCreateWindow(c_windowWidth, c_windowHeight, "Vulkan window", nullptr, nullptr);
+		m_window = glfwCreateWindow(m_windowWidth, m_windowHeight, "Vulkan window", nullptr, nullptr);
+		glfwSetWindowUserPointer(m_window, this);
+		glfwSetFramebufferSizeCallback(m_window, OnFrameBufferResizeCallback);
 	}
 	void InitVulkan()
 	{
@@ -508,7 +509,7 @@ private:
 	VkExtent2D ChooseSwapExtent(const VkSurfaceCapabilitiesKHR& surfaceCapabilities)
 	{
 		// reduced due to compile errors
-		VkExtent2D extentToUse = { c_windowWidth, c_windowHeight };
+		VkExtent2D extentToUse = { m_windowWidth, m_windowHeight };
 		return extentToUse;
 	}
 
@@ -950,11 +951,18 @@ private:
 	{
 		// wait for fence
 		vkWaitForFences(m_vulkanLogicalDevice, 1, &m_activeFrameInProcessFences[m_currentFrameSyncObjectIndex], VK_TRUE, m_getImageTimeOutNanoSeconds);
-		vkResetFences(m_vulkanLogicalDevice, 1, &m_activeFrameInProcessFences[m_currentFrameSyncObjectIndex]);
 
 		// get next image index from swap chain
 		uint32_t imageIndex = 0; // not to be confused with m_currentFrameSemaphoreIndex
-		vkAcquireNextImageKHR(m_vulkanLogicalDevice, m_swapChain, m_getImageTimeOutNanoSeconds, m_imageAvailableSemaphones[m_currentFrameSyncObjectIndex], VK_NULL_HANDLE, &imageIndex);
+		VkResult acquireNextImgRes = vkAcquireNextImageKHR(m_vulkanLogicalDevice, m_swapChain, m_getImageTimeOutNanoSeconds, m_imageAvailableSemaphones[m_currentFrameSyncObjectIndex], VK_NULL_HANDLE, &imageIndex);
+		if (acquireNextImgRes == VK_ERROR_OUT_OF_DATE_KHR)
+		{
+			RecreateSwapChain();
+		}
+		else if (acquireNextImgRes != VK_SUCCESS && acquireNextImgRes != VK_SUBOPTIMAL_KHR)
+		{
+			throw std::runtime_error("Failed to acquire swap chain image.");
+		}
 
 		// submit the command buffer for the frame
 		VkSubmitInfo submitInfo = {};
@@ -969,6 +977,8 @@ private:
 		submitInfo.commandBufferCount = 1;
 		submitInfo.signalSemaphoreCount = 1;
 		submitInfo.pSignalSemaphores = &m_renderFinishedSemaphores[m_currentFrameSyncObjectIndex];
+
+		vkResetFences(m_vulkanLogicalDevice, 1, &m_activeFrameInProcessFences[m_currentFrameSyncObjectIndex]);
 
 		if (vkQueueSubmit(m_graphicsQueue, 1, &submitInfo, m_activeFrameInProcessFences[m_currentFrameSyncObjectIndex]) != VK_SUCCESS)
 		{
@@ -985,11 +995,38 @@ private:
 		presentInfo.pResults = nullptr;
 		presentInfo.swapchainCount = 1;
 		presentInfo.pSwapchains = &m_swapChain;
-		vkQueuePresentKHR(m_presentQueue, &presentInfo);
+		VkResult vkQueuePresentRes = vkQueuePresentKHR(m_presentQueue, &presentInfo);
+
+		if (vkQueuePresentRes == VK_ERROR_OUT_OF_DATE_KHR || vkQueuePresentRes == VK_SUBOPTIMAL_KHR || m_frameBufferResized)
+		{
+			m_frameBufferResized = false;
+			RecreateSwapChain();
+		}
 
 		++m_currentFrameSyncObjectIndex;
 		m_currentFrameSyncObjectIndex %= S_MAX_FRAMES_TO_PROCESS_AT_ONCE;
+	}
 
+	static void OnFrameBufferResizeCallback(GLFWwindow* window, int width, int height)
+	{
+		VulkanApp* appPtr = reinterpret_cast<VulkanApp*>(glfwGetWindowUserPointer(window));
+		appPtr->m_frameBufferResized = true;
+		appPtr->m_windowWidth = static_cast<uint32_t>(width);
+		appPtr->m_windowHeight = static_cast<uint32_t>(height);
+	}
+
+	void RecreateSwapChain()
+	{
+		vkDeviceWaitIdle(m_vulkanLogicalDevice);
+		
+		CleanupSwapChain();
+
+		CreateSwapChain();
+		CreateImageViews();
+		CreateRenderPass();
+		CreateGraphicsPipeline();
+		CreateFrameBuffers();
+		CreateCommandBuffers();
 	}
 
 	void CleanupSwapChain()
@@ -1088,8 +1125,8 @@ private:
 	}
 	// end of debug functions
 
-	const uint32_t c_windowWidth;
-	const uint32_t c_windowHeight;
+	uint32_t m_windowWidth;
+	uint32_t m_windowHeight;
 	GLFWwindow* m_window;
 	VkInstance m_vulkanInstance;
 	VkPhysicalDevice m_vulkanPhysicalDevice; //note that this gets deleted when destroying m_vulkanInstance
@@ -1132,6 +1169,7 @@ private:
 	std::vector<VkFence> m_activeFrameInProcessFences;
 
 	size_t m_currentFrameSyncObjectIndex;
+	bool m_frameBufferResized;
 };
 
 
