@@ -81,6 +81,7 @@ public:
 		, m_getImageTimeOutNanoSeconds(0)
 		, m_currentFrameSyncObjectIndex(0)
 		, m_frameBufferResized(false)
+		, m_vertexBuffer(nullptr)
 #if (NDEBUG)
 		, m_useVulkanValidationLayers(false) // release build
 #else
@@ -157,6 +158,7 @@ private:
 		CreateGraphicsPipeline();
 		CreateFrameBuffers();
 		CreateCommandPool();
+		CreateVertexBuffer();
 		CreateCommandBuffers();
 		CreateVulkanSyncObjects();
 	}
@@ -890,6 +892,38 @@ private:
 		}
 	}
 
+	void CreateVertexBuffer()
+	{
+		m_vertices = 
+		{
+			{{0.0f, -0.5f}, {1.0f, 1.0f, 1.0f}},
+			{{0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}},
+			{{-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
+		};
+
+		VkBufferCreateInfo vertBufCreateInfo = {};
+		vertBufCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+		vertBufCreateInfo.size = sizeof(m_vertices[0]) * m_vertices.size();
+		vertBufCreateInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+		vertBufCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+		if (vkCreateBuffer(m_vulkanLogicalDevice, &vertBufCreateInfo, nullptr, &m_vertexBuffer) != VK_SUCCESS)
+		{
+			throw std::runtime_error("failed to create vertex buffer");
+		}
+
+		// get the buffer memory requirements
+		VkMemoryRequirements bufMemRequirements = {};
+		vkGetBufferMemoryRequirements(m_vulkanLogicalDevice, m_vertexBuffer, &bufMemRequirements);
+
+		// get the physical device memory requirements
+		VkPhysicalDeviceMemoryProperties bufPhysicalDeviceMemProperties = {};
+		vkGetPhysicalDeviceMemoryProperties(m_vulkanPhysicalDevice, &bufPhysicalDeviceMemProperties);
+
+		// TODO add a FindMemoryType() to get the correct type of memory for the vertex buffer.
+		assert(false);
+	}
+
 	void CreateCommandBuffers()
 	{
 		const size_t nFrameBuffers = m_swapChainFrameBuffers.size();
@@ -1083,6 +1117,7 @@ private:
 	void Shutdown()
 	{
 		CleanupSwapChain();
+		vkDestroyBuffer(m_vulkanLogicalDevice, m_vertexBuffer, nullptr);
 		if (m_imageAvailableSemaphones.size() > 0 || m_renderFinishedSemaphores.size() > 0 || m_activeFrameInProcessFences.size() > 0)
 		{
 			for (size_t i = 0; i < S_MAX_FRAMES_TO_PROCESS_AT_ONCE; ++i)
@@ -1204,6 +1239,11 @@ private:
 
 	size_t m_currentFrameSyncObjectIndex;
 	bool m_frameBufferResized;
+
+	// start of Vertex buffers tutorial additions
+	VkBuffer m_vertexBuffer;
+	std::vector<Vertex> m_vertices;
+
 };
 
 
