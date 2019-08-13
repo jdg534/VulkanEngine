@@ -992,8 +992,26 @@ private:
 
 	}
 
+	void CleanupSwapChain()
+	{
+		for (size_t i = 0; i < m_swapChainFrameBuffers.size(); ++i)
+		{
+			vkDestroyFramebuffer(m_vulkanLogicalDevice, m_swapChainFrameBuffers[i], nullptr);
+		}
+		vkFreeCommandBuffers(m_vulkanLogicalDevice, m_commandPool, static_cast<uint32_t>(m_commandBuffers.size()), m_commandBuffers.data());
+		vkDestroyPipeline(m_vulkanLogicalDevice, m_pipeline, nullptr);
+		vkDestroyPipelineLayout(m_vulkanLogicalDevice, m_pipelineLayout, nullptr);
+		vkDestroyRenderPass(m_vulkanLogicalDevice, m_renderPass, nullptr);
+		for (size_t i = 0; i < m_swapChainImageViews.size(); ++i)
+		{
+			vkDestroyImageView(m_vulkanLogicalDevice, m_swapChainImageViews[i], nullptr);
+		}
+		vkDestroySwapchainKHR(m_vulkanLogicalDevice, m_swapChain, nullptr);
+	}
+
 	void Shutdown()
 	{
+		CleanupSwapChain();
 		if (m_imageAvailableSemaphones.size() > 0 || m_renderFinishedSemaphores.size() > 0 || m_activeFrameInProcessFences.size() > 0)
 		{
 			for (size_t i = 0; i < S_MAX_FRAMES_TO_PROCESS_AT_ONCE; ++i)
@@ -1003,54 +1021,9 @@ private:
 				vkDestroyFence(m_vulkanLogicalDevice, m_activeFrameInProcessFences[i], nullptr);
 			}
 		}
-		if (m_commandBuffers.size() > 0)
-		{
-			for (VkCommandBuffer& cmdBuffer : m_commandBuffers)
-			{
-				// vkDestroyCommandBuff?
-				// tutorial says they don't need clean up, check when refactoring
-			}
-		}
 		if (m_commandPool)
 		{
 			vkDestroyCommandPool(m_vulkanLogicalDevice, m_commandPool, nullptr);
-		}
-
-		if (m_swapChainFrameBuffers.size() > 0)
-		{
-			for (const VkFramebuffer& fb : m_swapChainFrameBuffers)
-			{
-				vkDestroyFramebuffer(m_vulkanLogicalDevice, fb, nullptr);
-			}
-		}
-		if (m_swapChainImageViews.size() > 0)
-		{
-			for (const VkImageView& imgView : m_swapChainImageViews)
-			{
-				vkDestroyImageView(m_vulkanLogicalDevice, imgView, nullptr);
-			}
-			m_swapChainImageViews.clear();
-		}
-		/* these get deleted when the swap chain are deleted
-		if (m_swapChainImages.size() > 0)
-		{
-			for (const VkImage& img : m_swapChainImages)
-			{
-				vkDestroyImage(m_vulkanLogicalDevice, img, nullptr);
-			}
-			m_swapChainImages.clear();
-		}*/
-		if (m_pipeline)
-		{
-			vkDestroyPipeline(m_vulkanLogicalDevice, m_pipeline, nullptr);
-		}
-		if (m_pipelineLayout)
-		{
-			vkDestroyPipelineLayout(m_vulkanLogicalDevice, m_pipelineLayout, nullptr);
-		}
-		if (m_renderPass)
-		{
-			vkDestroyRenderPass(m_vulkanLogicalDevice, m_renderPass, nullptr);
 		}
 		if (m_vertexShaderModule)
 		{
@@ -1064,10 +1037,6 @@ private:
 		if (m_useVulkanValidationLayers)
 		{
 			DestroyDebugUtilsMessengerEXT(m_vulkanInstance, m_vulkanDebugMessenger, nullptr);
-		}
-		if (m_swapChain)
-		{
-			vkDestroySwapchainKHR(m_vulkanLogicalDevice, m_swapChain, nullptr);
 		}
 		if (m_vulkanLogicalDevice)
 		{
