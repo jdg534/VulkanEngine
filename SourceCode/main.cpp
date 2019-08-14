@@ -82,6 +82,7 @@ public:
 		, m_currentFrameSyncObjectIndex(0)
 		, m_frameBufferResized(false)
 		, m_vertexBuffer(nullptr)
+		, m_vertexBufferMemory(nullptr)
 #if (NDEBUG)
 		, m_useVulkanValidationLayers(false) // release build
 #else
@@ -916,12 +917,40 @@ private:
 		VkMemoryRequirements bufMemRequirements = {};
 		vkGetBufferMemoryRequirements(m_vulkanLogicalDevice, m_vertexBuffer, &bufMemRequirements);
 
-		// get the physical device memory requirements
-		VkPhysicalDeviceMemoryProperties bufPhysicalDeviceMemProperties = {};
-		vkGetPhysicalDeviceMemoryProperties(m_vulkanPhysicalDevice, &bufPhysicalDeviceMemProperties);
+		VkMemoryAllocateInfo vkMallocInfo = {};
+		vkMallocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+		vkMallocInfo.allocationSize = bufMemRequirements.size;
+		vkMallocInfo.memoryTypeIndex = FindMemoryType(bufMemRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 
-		// TODO add a FindMemoryType() to get the correct type of memory for the vertex buffer.
-		assert(false);
+		if (vkAllocateMemory(m_vulkanLogicalDevice, &vkMallocInfo, nullptr, &m_vertexBufferMemory) != VK_SUCCESS)
+		{
+			throw std::runtime_error("Failed to allocate vertex buffer memory.");
+		}
+		
+		vkBindBufferMemory(m_vulkanLogicalDevice, m_vertexBuffer, m_vertexBufferMemory, 0); // 0 is an offset, if non 0, make sure that (val % bufMemRequirements.alignment == 0) 
+
+		// copy the values to the device memory
+		void* deviceMem = nullptr;
+		vkMapMemory(m_vulkanLogicalDevice, m_vertexBufferMemory, 0, bufMemRequirements.size, 0, &deviceMem);
+		std::memcpy(deviceMem, m_vertices.data(), bufMemRequirements.size);
+		vkUnmapMemory(m_vulkanLogicalDevice, m_vertexBufferMemory);
+	}
+
+	uint32_t FindMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags  memProperties)
+	{
+		// get the physical device memory requirements
+		VkPhysicalDeviceMemoryProperties physicalDeviceMemProperties = {};
+		vkGetPhysicalDeviceMemoryProperties(m_vulkanPhysicalDevice, &physicalDeviceMemProperties);
+
+		for (uint32_t i = 0; i < physicalDeviceMemProperties.memoryTypeCount; ++i)
+		{
+			if ((typeFilter & (1 << i)) && (physicalDeviceMemProperties.memoryTypes[i].propertyFlags & memProperties) == memProperties)
+			{
+				return i;
+			}
+		}
+		throw std::runtime_error("Failed to find memory type that fits the flags");
+		return 0;
 	}
 
 	void CreateCommandBuffers()
@@ -952,7 +981,6 @@ private:
 			{
 				throw std::runtime_error("Failed the start recording a command buffer!");
 			}
-
 			
 			VkRenderPassBeginInfo renderPassBeginInfo = {};
 			renderPassBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
@@ -966,7 +994,10 @@ private:
 			vkCmdBeginRenderPass(m_commandBuffers[i], &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
 			// start draw commands
 			vkCmdBindPipeline(m_commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipeline);
-			vkCmdDraw(m_commandBuffers[i], 3, 1, 0, 0);
+
+			VkDeviceSize offsets[] = { 0 };
+			vkCmdBindVertexBuffers(m_commandBuffers[i], 0, 1, &m_vertexBuffer, offsets);
+			vkCmdDraw(m_commandBuffers[i], static_cast<uint32_t>(m_vertices.size()), 1, 0, 0);
 			// end draw commands
 			vkCmdEndRenderPass(m_commandBuffers[i]);
 			if (vkEndCommandBuffer(m_commandBuffers[i]) != VK_SUCCESS)
@@ -1118,6 +1149,7 @@ private:
 	{
 		CleanupSwapChain();
 		vkDestroyBuffer(m_vulkanLogicalDevice, m_vertexBuffer, nullptr);
+		vkFreeMemory(m_vulkanLogicalDevice, m_vertexBufferMemory, nullptr);
 		if (m_imageAvailableSemaphones.size() > 0 || m_renderFinishedSemaphores.size() > 0 || m_activeFrameInProcessFences.size() > 0)
 		{
 			for (size_t i = 0; i < S_MAX_FRAMES_TO_PROCESS_AT_ONCE; ++i)
@@ -1242,6 +1274,7 @@ private:
 
 	// start of Vertex buffers tutorial additions
 	VkBuffer m_vertexBuffer;
+	VkDeviceMemory m_vertexBufferMemory;
 	std::vector<Vertex> m_vertices;
 
 };
