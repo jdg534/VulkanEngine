@@ -50,7 +50,8 @@ struct Vertex
 		attribDescs[0].location = 0;
 		attribDescs[0].format = VK_FORMAT_R32G32_SFLOAT;
 		attribDescs[0].offset = offsetof(Vertex, position);
-		attribDescs[1].binding = 1;
+		
+		attribDescs[1].binding = 0; // was 1, need to check docs
 		attribDescs[1].location = 1;
 		attribDescs[1].format = VK_FORMAT_R32G32B32_SFLOAT;
 		attribDescs[1].offset = offsetof(Vertex, colour);
@@ -150,7 +151,7 @@ private:
 		CreateVulkanInstance();
 		SetupVulkanDebugMessenger();
 		CreateSurfaceToDrawTo();
-		QueryVulkanExtentions();		
+		// QueryVulkanExtentions(); // add it back in if we need to check the extention strings
 		SelectVulkanDevice();
 		CreateLogicalVulkanDevice();
 		CreateSwapChain();
@@ -664,8 +665,8 @@ private:
 		std::array< VkVertexInputAttributeDescription, 2> attribDesc = Vertex::GetAttributeDescriptions();
 
 		vertexInputStateCreateInfo.vertexBindingDescriptionCount = 1;
-		vertexInputStateCreateInfo.pVertexBindingDescriptions = &vertBindingDesc;
 		vertexInputStateCreateInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(attribDesc.size());
+		vertexInputStateCreateInfo.pVertexBindingDescriptions = &vertBindingDesc;
 		vertexInputStateCreateInfo.pVertexAttributeDescriptions = attribDesc.data();
 
 		VkPipelineInputAssemblyStateCreateInfo inputAssemblyStateCreateInfo = {};
@@ -1116,6 +1117,13 @@ private:
 
 	void RecreateSwapChain()
 	{
+		int width = 0, height = 0;
+		while (width == 0 || height == 0)
+		{
+			glfwGetFramebufferSize(m_window, &width, &height);
+			glfwWaitEvents();
+		}
+
 		vkDeviceWaitIdle(m_vulkanLogicalDevice);
 		
 		CleanupSwapChain();
