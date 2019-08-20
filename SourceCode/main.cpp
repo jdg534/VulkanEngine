@@ -932,8 +932,8 @@ private:
 
 		// copy the values to the device memory
 		void* deviceMem = nullptr;
-		vkMapMemory(m_vulkanLogicalDevice, m_vertexBufferMemory, 0, bufMemRequirements.size, 0, &deviceMem);
-		std::memcpy(deviceMem, m_vertices.data(), bufMemRequirements.size);
+		vkMapMemory(m_vulkanLogicalDevice, m_vertexBufferMemory, 0, vertBufCreateInfo.size, 0, &deviceMem);
+		std::memcpy(deviceMem, m_vertices.data(), static_cast<size_t>(vertBufCreateInfo.size));
 		vkUnmapMemory(m_vulkanLogicalDevice, m_vertexBufferMemory);
 	}
 
@@ -958,6 +958,7 @@ private:
 	{
 		const size_t nFrameBuffers = m_swapChainFrameBuffers.size();
 		m_commandBuffers.resize(nFrameBuffers);
+
 		VkCommandBufferAllocateInfo cmdBuffersAllocInfo = {};
 		cmdBuffersAllocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
 		cmdBuffersAllocInfo.commandPool = m_commandPool;
@@ -975,8 +976,6 @@ private:
 		{
 			VkCommandBufferBeginInfo cmdBuffBeginInfo = {};
 			cmdBuffBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-			cmdBuffBeginInfo.flags = 0;
-			cmdBuffBeginInfo.pInheritanceInfo = nullptr;
 
 			if (vkBeginCommandBuffer(m_commandBuffers[i], &cmdBuffBeginInfo) != VK_SUCCESS)
 			{
@@ -993,6 +992,7 @@ private:
 			renderPassBeginInfo.pClearValues = &clearColour;
 			renderPassBeginInfo.clearValueCount = 1;
 			vkCmdBeginRenderPass(m_commandBuffers[i], &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+			
 			// start draw commands
 			vkCmdBindPipeline(m_commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipeline);
 
@@ -1000,6 +1000,7 @@ private:
 			vkCmdBindVertexBuffers(m_commandBuffers[i], 0, 1, &m_vertexBuffer, offsets);
 			vkCmdDraw(m_commandBuffers[i], static_cast<uint32_t>(m_vertices.size()), 1, 0, 0);
 			// end draw commands
+			
 			vkCmdEndRenderPass(m_commandBuffers[i]);
 			if (vkEndCommandBuffer(m_commandBuffers[i]) != VK_SUCCESS)
 			{
